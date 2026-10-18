@@ -148,6 +148,35 @@ public class ApiTests : IClassFixture<TestWebAppFactory>
     }
 
     [Fact]
+    public async Task An_imported_AppHost_is_checked_for_syntax_not_compiled_alone()
+    {
+        // Compiled on its own, a real AppHost reported its project references, packages and other
+        // files as errors: "AddProject<TProject> cannot be inferred", "no AddViteApp", "TallyResources".
+        const string program = """
+            var builder = DistributedApplication.CreateBuilder(args);
+            var api = builder.AddProject<Projects.Tally_Api>("api");
+            builder.AddViteApp("frontend", "../frontend").WithReference(api);
+            TallyResources.Wire(builder, builder.Configuration.GetValue<bool>("x"));
+            builder.Build().Run();
+            """;
+        var sources = new List<SourceFileDto>
+        {
+            new("AppHost/AppHost.cs", B64(program)),
+            new("AppHost/AppHost.csproj", B64("""<Project Sdk="Aspire.AppHost.Sdk/13.5.2"></Project>""")),
+        };
+        var resp = await _c.PostAsJsonAsync("/api/import/local", new LocalImportRequestDto("Validated", "apphost", sources));
+        resp.EnsureSuccessStatusCode();
+        var stack = (await resp.Content.ReadFromJsonAsync<StackModel>())!;
+
+        Assert.Empty((await _c.GetFromJsonAsync<List<CodeDiagnostic>>($"/api/stacks/{stack.Id}/validate"))!);
+        var posted = await _c.PostAsJsonAsync($"/api/stacks/{stack.Id}/code/diagnostics", new { code = program, offset = 0 });
+        Assert.Empty((await posted.Content.ReadFromJsonAsync<List<CodeDiagnostic>>())!);
+
+        var broken = await _c.PostAsJsonAsync($"/api/stacks/{stack.Id}/code/diagnostics", new { code = "var x = ;", offset = 0 });
+        Assert.Contains((await broken.Content.ReadFromJsonAsync<List<CodeDiagnostic>>())!, d => d.Severity == "error");
+    }
+
+    [Fact]
     public async Task LocalImport_NoAppHostNoCompose_Returns422()
     {
         var sources = new List<SourceFileDto> { new("Foo.cs", B64("public class Foo { }")) };

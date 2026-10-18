@@ -6,7 +6,7 @@ import { lintStack } from "../model";
 // Compact health indicator in the header; clicking opens (and flashes) the Validation panel.
 export function ValidateBadge() {
   const { diagnostics, stack, showPanel } = useEditor();
-  const lint = lintStack(stack);
+  const lint = stack.runAsIs ? [] : lintStack(stack);
   const errors = diagnostics.filter(d => d.severity === "error").length + lint.filter(l => l.severity === "error").length;
   const warns = diagnostics.filter(d => d.severity === "warning").length + lint.filter(l => l.severity === "warning").length;
   return (

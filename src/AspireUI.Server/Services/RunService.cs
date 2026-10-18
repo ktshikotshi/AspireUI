@@ -35,7 +35,7 @@ public class RunService : IDisposable
         _graph = graph;
     }
 
-    private static int FreeTcpPort()
+    public static int FreeTcpPort()
     {
         var l = new TcpListener(IPAddress.Loopback, 0);
         l.Start();
@@ -63,7 +63,12 @@ public class RunService : IDisposable
         return m.Success ? m.Value : null;
     }
 
-    public RunStatus Start(string id, string workdir, string? project = null)
+    /// <param name="dashboardPort">
+    /// Serve the dashboard on this port on every interface instead of on loopback. Inside a container
+    /// loopback is the container's own, so the dashboard link refused every browser. A command-line
+    /// value wins over the AppHost's launch profile.
+    /// </param>
+    public RunStatus Start(string id, string workdir, string? project = null, int? dashboardPort = null)
     {
         if (_runs.TryGetValue(id, out var existing) &&
             existing.State is RunState.Running or RunState.Starting)
@@ -72,6 +77,8 @@ public class RunService : IDisposable
         var psi = _commandFactory(workdir);
         if (!string.IsNullOrWhiteSpace(project))
             psi.Arguments = $"run --project \"{Path.Combine(workdir, project)}\"";
+        if (dashboardPort is > 0)
+            psi.Arguments += $" -- --ASPNETCORE_URLS=http://0.0.0.0:{dashboardPort}";
         psi.RedirectStandardOutput = true;
         psi.RedirectStandardError = true;
         psi.UseShellExecute = false;
