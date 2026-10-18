@@ -1,9 +1,9 @@
 # syntax=docker/dockerfile:1
 
 # ---- build: SDK + Node (SPA build) + publish ------------------------------
-# Pinned to the BUILD platform on purpose: the publish output is portable IL, and the
-# arm64 `protoc` bundled with Grpc.Tools segfaults (exit 139) on the dashboard proto — both
-# under QEMU and on native arm64. Building on the host arch keeps multi-arch images working.
+# Pinned to the BUILD platform on purpose: the publish output is portable IL, so building on the
+# host arch is faster than emulating the target. No protoc runs here: the arm64 `protoc` bundled
+# with Grpc.Tools segfaults (exit 139), so the dashboard client is checked in (Protos/Generated).
 FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 
 # Node is only needed here to build the web/ SPA (csproj's BuildSpa target

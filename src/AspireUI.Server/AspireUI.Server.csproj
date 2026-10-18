@@ -83,7 +83,13 @@
     <None Include="../../Directory.Packages.props" Link="Directory.Packages.props" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
-  <ItemGroup>
+  <!-- The dashboard client is generated once and checked in under Protos/Generated: the arm64 protoc
+       that ships in Grpc.Tools segfaults (exit 139), so building on an arm64 machine (an Apple Silicon
+       Mac, an arm64 server) failed. After changing the .proto, regenerate with
+       `dotnet build src/AspireUI.Server -p:RegenerateProtos=true` on an x64 machine and copy
+       obj/Debug/net10.0/Protos/*.cs over Protos/Generated. -->
+  <ItemGroup Condition="'$(RegenerateProtos)' == 'true'">
+    <Compile Remove="Protos/Generated/**" />
     <Protobuf Include="Protos/dashboard_service.proto" GrpcServices="Client" />
   </ItemGroup>
 
