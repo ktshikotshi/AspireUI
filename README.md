@@ -1,3 +1,8 @@
+> **Fork.** This is [ktshikotshi/AspireUI](https://github.com/ktshikotshi/AspireUI), a fork of
+> [fgilde/AspireUI](https://github.com/fgilde/AspireUI) (AGPL-3.0) carrying fixes for Git redeploys
+> and compose imports. Image: `ghcr.io/ktshikotshi/aspireui:latest`. Unraid template:
+> `https://raw.githubusercontent.com/ktshikotshi/AspireUI/master/templates/aspireui-fork.xml`.
+
 <p align="center"><img src="docs/aspireui_wordmark.svg" alt="AspireUI" width="540" /></p>
 
 <p align="center">
