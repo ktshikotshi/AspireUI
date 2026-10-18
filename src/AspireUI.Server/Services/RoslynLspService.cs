@@ -81,6 +81,18 @@ public class RoslynLspService
         catch { return []; }
     }
 
+    /// <summary>
+    /// Parse errors only. An imported AppHost compiles against its own project: its other files,
+    /// project references (`Projects.*`) and packages are not here, so a full compile reports errors
+    /// that are not there. Whether it really builds shows when it is run or deployed.
+    /// </summary>
+    public static IReadOnlyList<CodeDiagnostic> SyntaxDiagnostics(string code) =>
+        CSharpSyntaxTree.ParseText(code).GetDiagnostics()
+            .Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
+            .Select(d => new CodeDiagnostic(d.GetMessage(), d.Severity.ToString().ToLowerInvariant(),
+                d.Location.SourceSpan.Start, d.Location.SourceSpan.End))
+            .Take(200).ToList();
+
     public async Task<string?> HoverAsync(string code, int offset)
     {
         try

@@ -7,7 +7,7 @@ namespace AspireUI.Server.Services;
 public class DevProxyService(DeployService deploy)
 {
     public const string Image = "alpine/socat";
-    private static bool InContainer => File.Exists("/.dockerenv");
+    public static bool InContainer => File.Exists("/.dockerenv");
     private static string Prefix(string stackId) => $"aspireui-devfwd-{stackId[..Math.Min(8, stackId.Length)]}";
 
     // (resource-name, loopback port) for running dev containers matched by container name + 127.0.0.1:<port>.
@@ -51,6 +51,42 @@ public class DevProxyService(DeployService deploy)
                 $"TCP-LISTEN:{port},bind={publicHost},fork,reuseaddr TCP:127.0.0.1:{port}");
         }
         return true;
+    }
+
+    /// <summary>
+    /// A dev run's dashboard listens inside this container, and only the ports the container was
+    /// started with reach the host. A socat sidecar on this container's network publishes
+    /// <paramref name="port"/> on the host and passes it through. On the host's network nothing is
+    /// needed. Returns false when it could not tell where this container is.
+    /// </summary>
+    public bool ForwardDashboard(string stackId, int port)
+    {
+        if (!InContainer) return false;
+        var self = Environment.MachineName;
+        var inspect = deploy.Docker(".", $"inspect --format \"{{{{.HostConfig.NetworkMode}}}}|{{{{range $k, $v := .NetworkSettings.Networks}}}}{{{{$k}}}}={{{{$v.IPAddress}}}};{{{{end}}}}\" {self}");
+        if (!inspect.Ok) return false;
+        var (network, ip) = ParseSelf(inspect.Log);
+        if (network == "host") return true;
+        if (network is null || ip is null) return false;
+        var name = $"{Prefix(stackId)}-dash";
+        deploy.Docker(".", $"rm -f {name}");
+        return deploy.Docker(".", $"run -d --name {name} --network {network} -p {port}:{port} --restart unless-stopped {Image} " +
+            $"TCP-LISTEN:{port},fork,reuseaddr TCP:{ip}:{port}").Ok;
+    }
+
+    /// <summary>`mode|net=ip;net=ip;` from docker inspect → the network to join and this container's address on it.</summary>
+    public static (string? Network, string? Ip) ParseSelf(string inspectOutput)
+    {
+        var line = inspectOutput.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).LastOrDefault() ?? "";
+        var parts = line.Split('|', 2);
+        if (parts[0] == "host") return ("host", null);
+        if (parts.Length < 2) return (null, null);
+        foreach (var pair in parts[1].Split(';', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var kv = pair.Split('=', 2);
+            if (kv.Length == 2 && kv[1].Length > 0) return (kv[0], kv[1]);
+        }
+        return (null, null);
     }
 
     public void Teardown(string stackId)

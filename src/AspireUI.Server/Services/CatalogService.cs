@@ -395,7 +395,7 @@ public class CatalogService
                      "Aspire.Hosting.Milvus", "Aspire.Hosting.Azure.CosmosDB",
                      "CommunityToolkit.Aspire.Hosting.Java", "CommunityToolkit.Aspire.Hosting.ActiveMQ",
                      "CommunityToolkit.Aspire.Hosting.Golang", "CommunityToolkit.Aspire.Hosting.Dapr",
-                     "Aspire.Hosting.Yarp", "Aspire.Hosting.Oracle", "Aspire.Hosting.Python",
+                     "Aspire.Hosting.Yarp", "Aspire.Hosting.Oracle", "Aspire.Hosting.Python", "Aspire.Hosting.JavaScript",
                      "Aspire.Hosting.Azure.Storage", "Aspire.Hosting.Azure.ServiceBus", "Aspire.Hosting.Azure.KeyVault",
                      "Aspire.Hosting.Azure.ApplicationInsights", "Aspire.Hosting.Azure.CognitiveServices", "Aspire.Hosting.Maui",
                      "CommunityToolkit.Aspire.Hosting.MinIO", "CommunityToolkit.Aspire.Hosting.Meilisearch",

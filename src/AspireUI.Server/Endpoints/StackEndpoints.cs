@@ -1097,7 +1097,12 @@ public static class StackEndpoints
             if (LockGuard(id) is { } r) return r;
             if (store.Get(id) is not { } s) return Results.NotFound();
             gen.Materialize(s, Dir(id));
-            return Results.Ok(WithHost(run.Start(id, Path.GetFullPath(Dir(id)), s.RunAsIs ? s.AppHostProject : null), ctx));
+            // Inside a container the dashboard has to listen beyond loopback and be published on the host.
+            int? dashPort = DevProxyService.InContainer && run.Status(id).State is not (RunState.Running or RunState.Starting)
+                ? RunService.FreeTcpPort() : null;
+            var started = run.Start(id, Path.GetFullPath(Dir(id)), s.RunAsIs ? s.AppHostProject : null, dashPort);
+            if (dashPort is { } dp) devProxy.ForwardDashboard(id, dp);
+            return Results.Ok(WithHost(started, ctx));
         }).RequirePerm(Perm.OpenEditor);
         app2.MapPost("/stacks/{id}/stop", (string id) => { devProxy.Teardown(id); return Results.Ok(run.Stop(id)); }).RequirePerm(Perm.OpenEditor);
         app2.MapGet("/stacks/{id}/status", (string id, HttpContext ctx) => Results.Ok(WithHost(run.Status(id), ctx)));
@@ -1206,12 +1211,18 @@ public static class StackEndpoints
             Results.Ok(new { contents = await lsp.HoverAsync(r.Code, r.Offset) }));
         app2.MapPost("/stacks/{id}/code/signature", async (string id, CodeRequest r) =>
             Results.Ok(await lsp.SignatureAsync(r.Code, r.Offset)));
+        // An imported AppHost (run as-is) is only checked for syntax: compiled on its own it misses
+        // its project's other files, references and packages, and every one of those read as an error.
         app2.MapPost("/stacks/{id}/code/diagnostics", (string id, CodeRequest r) =>
-            Results.Ok(lsp.Diagnostics(r.Code)));
+            Results.Ok(store.Get(id) is { RunAsIs: true } ? RoslynLspService.SyntaxDiagnostics(r.Code) : lsp.Diagnostics(r.Code)));
         // Whole-stack semantic validation: Roslyn diagnostics over the generated Program.cs (real
         // compile errors/warnings, not just syntax), for a canvas-level health badge.
         app2.MapGet("/stacks/{id}/validate", (string id) =>
-            store.Get(id) is { } s ? Results.Ok(lsp.Diagnostics(gen.GenerateProgram(s))) : Results.NotFound());
+            store.Get(id) is not { } s ? Results.NotFound()
+            : s.RunAsIs && s.AppHostProject is { } ahp
+                ? Results.Ok(RoslynLspService.SyntaxDiagnostics(DirImporter.ReadAppHostEntry(
+                    Path.Combine(Dir(id), Path.GetDirectoryName(ahp.Replace('/', Path.DirectorySeparatorChar)) ?? ""))))
+                : Results.Ok(lsp.Diagnostics(gen.GenerateProgram(s))));
 
         app2.MapPost("/stacks/{id}/code/save", (string id, CodeSaveRequest r) =>
         {

@@ -29,4 +29,13 @@ public class DevProxyTests
     [InlineData("http://localhost:42129/path", "192.168.178.63", 32773, "http://192.168.178.63:32773/path")]
     public void WithHostPort_swaps_host_and_port(string url, string host, int port, string expected)
         => Assert.Equal(expected, HostUrls.WithHostPort(url, host, port));
+
+    // A dev run's dashboard is forwarded by a sidecar on AspireUI's own network, to AspireUI's address there.
+    [Theory]
+    [InlineData("bridge|bridge=172.17.0.2;", "bridge", "172.17.0.2")]
+    [InlineData("aspire_net|aspire_net=10.1.0.5;other=;", "aspire_net", "10.1.0.5")]
+    [InlineData("host|", "host", null)]
+    [InlineData("none|", null, null)]
+    public void Where_this_container_lives_is_read_from_docker_inspect(string output, string? network, string? ip)
+        => Assert.Equal((network, ip), DevProxyService.ParseSelf(output));
 }
