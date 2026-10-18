@@ -74,6 +74,8 @@ public class PublishService
             : Directory.GetFiles(srcDir, "*.csproj").FirstOrDefault();
         if (csproj is null || !File.Exists(csproj))
             throw new InvalidOperationException("no csproj materialized");
+        // An imported AppHost was written to run, not to publish: give the copy the target's environment.
+        var prep = s.RunAsIs && t.Env is not null ? AppHostPublish.EnsureEnvironment(csproj, t.Env, srcDir) : "";
 
         var psi = _commandFactory(target, Path.GetFullPath(csproj), Path.GetFullPath(outDir));
         psi.RedirectStandardOutput = true;
@@ -82,6 +84,7 @@ public class PublishService
         psi.CreateNoWindow = true;
 
         var log = new List<string>();
+        if (prep.Length > 0) log.AddRange(prep.Split('\n'));
         void OnLine(string? line) { if (line is not null) log.Add(line); }
 
         using var proc = new Process { StartInfo = psi };

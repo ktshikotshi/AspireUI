@@ -627,6 +627,14 @@ public class HostingService(DeploymentStore store, PublishService publish, Deplo
         lines.Insert(envIdx + 1, list ? $"      - \"{key}={val}\"" : $"      {key}: \"{val}\"");
     }
 
+    // The projects of an imported AppHost have no image until something builds one.
+    private static (string Yaml, bool Built) ProjectBuilds(string yaml, StackModel stack, string srcDir)
+    {
+        if (!stack.RunAsIs || stack.AppHostProject is not { Length: > 0 } ahp) return (yaml, false);
+        var csproj = Path.Combine(srcDir, ahp.Replace('/', Path.DirectorySeparatorChar));
+        return File.Exists(csproj) ? AppHostPublish.InjectProjectBuilds(yaml, AppHostPublish.Projects(csproj), srcDir) : (yaml, false);
+    }
+
     public Deployment Deploy(StackModel stack, string publishRoot, string host = "localhost",
         bool hostDashboard = true, string? dashboardToken = null, string? cloneSrc = null, string? targetId = null)
     {
@@ -648,10 +656,12 @@ public class HostingService(DeploymentStore store, PublishService publish, Deplo
             var pub = publish.Publish(stack, publishRoot, "compose", cloneSrc);
             if (!pub.Ok) { store.SetState(id, "failed", pub.Log); return store.Get(id)!; }
             var path = Path.Combine(pub.OutputDir, "docker-compose.yaml");
+            var srcDir = Path.Combine(publishRoot, "src");
+            var (composed, projectBuilds) = ProjectBuilds(File.ReadAllText(path), stack, srcDir);
             var (raw, hostNetworkPorts) = ApplyContainerRuntimeArgs(ApplyRuntime(
-                InjectDockerfileBuilds(EnsureCompanionDatabases(ConfigureDashboard(AddRestartPolicy(File.ReadAllText(path)), hostDashboard, dashboardToken)), stack, Path.Combine(publishRoot, "src")),
+                InjectDockerfileBuilds(EnsureCompanionDatabases(ConfigureDashboard(AddRestartPolicy(composed), hostDashboard, dashboardToken)), stack, srcDir),
                 stack.Limits, stack.Healthchecks), stack);
-            var needsBuild = stack.Nodes.Any(n => n.AddMethod == "AddDockerfile");
+            var needsBuild = projectBuilds || stack.Nodes.Any(n => n.AddMethod == "AddDockerfile");
             // Ports are per machine: what other apps on *this* target use, plus whatever else that
             // daemon already publishes (containers we did not create).
             var used = new HashSet<int>(store.List().Where(x => x.Id != id && x.Target == target.Id)
