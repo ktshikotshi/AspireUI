@@ -164,9 +164,18 @@ export function Editor() {
     runAsIsRef.current = false;           // let the unlock save (and further edits) through the guard
     resolveGuard(false);                  // the change that triggered the prompt is dropped; user redoes it unlocked
     setEditWarn(false);
-    const saved = await api.saveStack({ ...stack, runAsIs: false, appHostProject: null });
+    // The AppHost path stays, so "Back to my code" can find the user's project again.
+    const saved = await api.saveStack({ ...stack, runAsIs: false });
     setStackState(saved);
     toastOk("Editing unlocked — the code now regenerates from the graph");
+  };
+  // An imported AppHost that was unlocked: its own code is still in the folder, next to the generated one.
+  const canRestore = !!stack && !runAsIs && (!!stack.appHostProject
+    || (!!stack.hasSource && stack.nodes.some(n => n.addMethod === "AddProject")));
+  const restoreAsIs = async () => {
+    if (!stack) return;
+    try { setStackState(await api.restoreAsIs(stack.id)); toastOk("Back to your imported AppHost — it runs as written again"); }
+    catch (e) { toastErr(e); }
   };
   const [hostingBusy, setHostingBusy] = useState(false);
   const deployToHosting = useCallback(async (targetId?: string) => {
@@ -304,6 +313,13 @@ export function Editor() {
               <IconLock size={15} />
               <Text size="sm">Imported project — runs <b>as-is</b>. The visual editor is locked so your original code isn't regenerated.</Text>
               <Button size="compact-xs" color="violet" variant="light" leftSection={<IconLockOpen size={13} />} onClick={() => setEditWarn(true)}>Edit anyway</Button>
+            </Group>
+          )}
+          {canRestore && (
+            <Group gap="sm" px="md" py={6} style={{ background: "var(--mantine-color-yellow-light)", flexShrink: 0 }}>
+              <IconLockOpen size={15} />
+              <Text size="sm">Imported AppHost, unlocked — its code is regenerated from the graph, which may not build. Your own code is still there.</Text>
+              <Button size="compact-xs" color="violet" variant="light" leftSection={<IconLock size={13} />} onClick={restoreAsIs}>Back to my code</Button>
             </Group>
           )}
           <div style={{ flex: 1, minHeight: 0, position: "relative" }}>
