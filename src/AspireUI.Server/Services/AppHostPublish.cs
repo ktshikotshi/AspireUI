@@ -130,6 +130,116 @@ public static class AppHostPublish
         return (text, built);
     }
 
+    /// <summary>A JavaScript app the AppHost runs: its folder and the Add* method that declared it.</summary>
+    public sealed record JsApp(string Dir, string Kind);
+
+    /// <summary>
+    /// The JavaScript apps the AppHost runs, by resource name: `AddViteApp("web", "../web")` and its
+    /// siblings `AddJavaScriptApp`, `AddNodeApp` and `AddNextJsApp`.
+    /// </summary>
+    public static Dictionary<string, JsApp> JavaScriptApps(string csprojPath)
+    {
+        var dir = Path.GetDirectoryName(csprojPath)!;
+        var result = new Dictionary<string, JsApp>(StringComparer.Ordinal);
+        foreach (var f in SourceFiles(dir))
+            foreach (Match m in Regex.Matches(File.ReadAllText(f), @"Add(ViteApp|JavaScriptApp|NodeApp|NextJsApp)\(\s*""([^""]+)""\s*,\s*@?""([^""]+)"""))
+                result[m.Groups[2].Value] = new JsApp(Path.GetFullPath(Path.Combine(dir, m.Groups[3].Value.Replace('\\', '/'))), m.Groups[1].Value);
+        return result.Where(kv => Directory.Exists(kv.Value.Dir)).ToDictionary(kv => kv.Key, kv => kv.Value);
+    }
+
+    /// <summary>
+    /// Gives every JavaScript app in the published compose file a build, as
+    /// <see cref="InjectProjectBuilds"/> does for projects. An app folder with its own Dockerfile builds
+    /// from that; otherwise a Vite app becomes a static build served by nginx and any other app runs
+    /// `npm start` on Node. The published port is pointed at the port the image listens on.
+    /// </summary>
+    public static (string Yaml, bool Built) InjectJavaScriptBuilds(string yaml, IReadOnlyDictionary<string, JsApp> apps, string srcDir)
+    {
+        if (apps.Count == 0) return (yaml, false);
+        var root = Path.GetFullPath(srcDir);
+        var byKey = apps.ToDictionary(kv => EnvKey(kv.Key), kv => (Name: kv.Key, App: kv.Value));
+        var lines = yaml.Replace("\r\n", "\n").Split('\n').ToList();
+        var built = false;
+        for (var i = 0; i < lines.Count; i++)
+        {
+            var m = Regex.Match(lines[i], @"^    image:\s*""?\$\{([A-Za-z0-9_]+)_IMAGE\}""?\s*$");
+            if (!m.Success || !byKey.TryGetValue(m.Groups[1].Value, out var a)) continue;
+            var appDir = a.App.Dir;
+            if (appDir != root && !appDir.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.Ordinal)) continue;
+            var (dockerfile, port) = JsDockerfile(appDir, a.Name, a.App.Kind);
+            lines.RemoveAt(i);
+            lines.InsertRange(i, new[]
+            {
+                "    build:",
+                $"      context: {JsonSerializer.Serialize(appDir.Replace('\\', '/'))}",
+                $"      dockerfile: {JsonSerializer.Serialize(dockerfile)}",
+            });
+            if (port is { } p) TargetPort(lines, i, m.Groups[1].Value, p);
+            ExposeInsteadOfPublish(lines, i, m.Groups[1].Value);
+            built = true;
+        }
+        return (string.Join("\n", lines), built);
+    }
+
+    // The app's own Dockerfile and the port it EXPOSEs, or a generated one. A null port leaves the
+    // compose ports as Aspire wrote them: the generated Node image listens on the PORT Aspire sets.
+    private static (string Dockerfile, int? Port) JsDockerfile(string appDir, string name, string kind)
+    {
+        var own = Path.Combine(appDir, "Dockerfile");
+        if (File.Exists(own))
+        {
+            var expose = Regex.Matches(File.ReadAllText(own), @"^\s*EXPOSE\s+(\d+)", RegexOptions.Multiline | RegexOptions.IgnoreCase);
+            return ("Dockerfile", expose.Count > 0 ? int.Parse(expose[^1].Groups[1].Value) : null);
+        }
+        var dir = Path.Combine(appDir, ".aspireui");
+        Directory.CreateDirectory(dir);
+        var file = $"{EnvKey(name).ToLowerInvariant()}.Dockerfile";
+        var install = File.Exists(Path.Combine(appDir, "package-lock.json")) ? "npm ci" : "npm install";
+        var vite = kind == "ViteApp";
+        File.WriteAllText(Path.Combine(dir, file), vite
+            ? $"""
+                FROM node:22-alpine AS build
+                WORKDIR /app
+                COPY . .
+                RUN {install} && npm run build
+                FROM nginx:1.27-alpine
+                COPY --from=build /app/dist /usr/share/nginx/html
+
+                """
+            : $"""
+                FROM node:22-alpine
+                WORKDIR /app
+                COPY . .
+                RUN {install} && npm run build --if-present
+                ENV NODE_ENV=production
+                CMD ["npm", "start"]
+
+                """);
+        File.WriteAllText(Path.Combine(dir, file + ".dockerignore"), "**/node_modules/\n**/.git/\n.aspireui/\n");
+        return (".aspireui/" + file, vite ? 80 : null);
+    }
+
+    // Points each published port of the service at the port its image listens on:
+    // `"5173:5173"` → `"5173:80"`, a lone `"5173"` or `"${WEB_PORT}"` → `"80"`.
+    private static void TargetPort(List<string> lines, int inService, string key, int port)
+    {
+        var start = inService;
+        while (start > 0 && !Regex.IsMatch(lines[start], @"^  \S")) start--;
+        var end = inService;
+        while (end + 1 < lines.Count && !Regex.IsMatch(lines[end + 1], @"^ {0,2}\S")) end++;
+        var inPorts = false;
+        for (var j = start + 1; j <= end; j++)
+        {
+            if (Regex.IsMatch(lines[j], @"^    \S")) { inPorts = Regex.IsMatch(lines[j], @"^    ports:\s*$"); continue; }
+            if (!inPorts) continue;
+            var pm = Regex.Match(lines[j], @"^      -\s*""?(?:(?<host>\$\{[A-Za-z0-9_]+\}|\d+):)?(?:\$\{[A-Za-z0-9_]+\}|\d+)""?\s*$");
+            if (!pm.Success) continue;
+            lines[j] = pm.Groups["host"].Success ? $"      - \"{pm.Groups["host"].Value}:{port}\"" : $"      - \"{port}\"";
+        }
+        for (var j = start + 1; j <= end; j++)
+            lines[j] = lines[j].Replace("${" + key + "_PORT}", port.ToString());
+    }
+
     // `ports: - "${WEB_PORT}"` publishes on a random host port that changes with every redeploy.
     // Moved under `expose:` it gets a host port from the pool like every other app, kept across deploys.
     private static void ExposeInsteadOfPublish(List<string> lines, int inService, string key)

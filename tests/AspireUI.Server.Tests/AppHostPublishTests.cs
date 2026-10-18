@@ -156,4 +156,88 @@ public class AppHostPublishTests : IDisposable
         Assert.Contains("    ports:\n      - \"8000:8080\"", result);
         Assert.DoesNotContain("expose:", result);
     }
+
+    [Fact]
+    public void JavaScript_apps_are_found_with_their_folders()
+    {
+        Write("web/package.json", "{}");
+        Write("site/package.json", "{}");
+        var csproj = AppHost("<Project Sdk=\"Aspire.AppHost.Sdk/13.5.2\" />", """
+            var builder = DistributedApplication.CreateBuilder(args);
+            builder.AddViteApp("frontend", "../web");
+            builder.AddNodeApp("site", "../site", "server.js");
+            builder.AddViteApp("ghost", "../missing");
+            builder.Build().Run();
+            """);
+
+        var apps = AppHostPublish.JavaScriptApps(csproj);
+
+        Assert.Equal(["frontend", "site"], apps.Keys.Order());
+        Assert.Equal(Path.Combine(_root, "web"), apps["frontend"].Dir);
+        Assert.Equal("NodeApp", apps["site"].Kind);
+    }
+
+    [Fact]
+    public void A_JavaScript_app_with_its_own_Dockerfile_builds_from_it_on_the_port_it_exposes()
+    {
+        var web = Path.GetDirectoryName(Write("web/Dockerfile", "FROM nginx:1.27-alpine\nEXPOSE 80\n"))!;
+        const string yaml = """
+            services:
+              frontend:
+                image: "${FRONTEND_IMAGE}"
+                environment:
+                  PORT: "5173"
+                ports:
+                  - "5173:5173"
+            """;
+
+        var (result, built) = AppHostPublish.InjectJavaScriptBuilds(yaml,
+            new Dictionary<string, AppHostPublish.JsApp> { ["frontend"] = new(web, "ViteApp") }, _root);
+
+        Assert.True(built);
+        Assert.DoesNotContain("FRONTEND_IMAGE", result);
+        Assert.Contains($"      context: \"{web.Replace('\\', '/')}\"", result);
+        Assert.Contains("      dockerfile: \"Dockerfile\"", result);
+        Assert.Contains("    ports:\n      - \"5173:80\"", result);
+        Assert.False(Directory.Exists(Path.Combine(web, ".aspireui")));
+    }
+
+    [Fact]
+    public void A_Vite_app_without_a_Dockerfile_is_built_and_served_by_nginx()
+    {
+        var web = Path.GetDirectoryName(Write("web/package-lock.json", "{}"))!;
+        const string yaml = """
+            services:
+              frontend:
+                image: "${FRONTEND_IMAGE}"
+                ports:
+                  - "${FRONTEND_PORT}"
+            """;
+
+        var (result, _) = AppHostPublish.InjectJavaScriptBuilds(yaml,
+            new Dictionary<string, AppHostPublish.JsApp> { ["frontend"] = new(web, "ViteApp") }, _root);
+
+        Assert.Contains("      dockerfile: \".aspireui/frontend.Dockerfile\"", result);
+        Assert.Contains("    expose:\n      - \"80\"", result);
+        Assert.DoesNotContain("${FRONTEND_", result);
+        var dockerfile = File.ReadAllText(Path.Combine(web, ".aspireui/frontend.Dockerfile"));
+        Assert.Contains("RUN npm ci && npm run build", dockerfile);
+        Assert.Contains("COPY --from=build /app/dist /usr/share/nginx/html", dockerfile);
+    }
+
+    [Fact]
+    public void A_JavaScript_app_outside_the_source_is_left_alone()
+    {
+        const string yaml = """
+            services:
+              frontend:
+                image: "${FRONTEND_IMAGE}"
+            """;
+
+        var (result, built) = AppHostPublish.InjectJavaScriptBuilds(yaml,
+            new Dictionary<string, AppHostPublish.JsApp> { ["frontend"] = new(Path.GetTempPath(), "ViteApp") }, _root);
+
+        Assert.False(built);
+        Assert.Equal(yaml.Replace("\r\n", "\n"), result);
+    }
 }
