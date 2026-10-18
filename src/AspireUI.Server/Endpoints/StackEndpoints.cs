@@ -385,6 +385,20 @@ public static class StackEndpoints
         // Where things sit on the canvas, and nothing else: node positions, notes, groups. It changes no
         // code, so it is allowed on a run-as-is import (whose code must never be regenerated) and on a
         // running app, and skips the compile check a best-effort parse of someone's AppHost can fail.
+        // "Edit anyway" regenerates an imported AppHost from the graph, which cannot hold most real
+        // AppHosts (typed project references, other files). This goes back to the user's own code.
+        app2.MapPost("/stacks/{id}/as-is", (string id) =>
+        {
+            if (LockGuard(id) is { } lg) return lg;
+            if (store.Get(id) is not { } s) return Results.NotFound();
+            if (s.RunAsIs) return Results.Ok(s);
+            if (CodeGenService.RestoreAsIs(s, Dir(id)) is not { } ahp)
+                return Results.UnprocessableEntity(new { message = "this app's source has no AppHost project of its own" });
+            var restored = s with { RunAsIs = true, AppHostProject = ahp, HasSource = true };
+            store.Save(restored);
+            return Results.Ok(restored);
+        }).RequirePerm(Perm.OpenEditor);
+
         app2.MapPut("/stacks/{id}/layout", (string id, StackModel body) =>
         {
             if (store.Get(id) is not { } s) return Results.NotFound();

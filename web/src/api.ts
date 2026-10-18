@@ -262,6 +262,9 @@ export const saveStack = async (s: Stack): Promise<Stack> => {
   return fetch(`${base}/stacks/${s.id}`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(s) }).then(ok);
 };
 // Positions, notes and groups only: changes no code, so it needs no unlock on a run-as-is import.
+// Back to running an imported AppHost's own code after "Edit anyway".
+export const restoreAsIs = (id: string): Promise<Stack> =>
+  fetch(`${base}/stacks/${id}/as-is`, { method: "POST" }).then(ok);
 export const saveLayout = (s: Stack): Promise<Stack> =>
   fetch(`${base}/stacks/${s.id}/layout`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(s) }).then(ok);
 export const patchNode = async (id: string, node: Node): Promise<Stack> => {

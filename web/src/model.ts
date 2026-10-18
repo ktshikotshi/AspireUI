@@ -32,6 +32,7 @@ export interface Stack {
   runAsIs?: boolean;
   appHostProject?: string | null;
   fromGit?: boolean;
+  hasSource?: boolean;
   expireAt?: string | null; clonedFrom?: string | null; hookToken?: string | null;
 }
 
