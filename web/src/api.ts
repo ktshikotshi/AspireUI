@@ -83,6 +83,27 @@ export const setSso = (c: SsoConfig): Promise<void> =>
 export const testSso = (c: SsoConfig): Promise<{ authorization: string; token: string; userInfo?: string | null; hasUserInfo: boolean }> =>
   fetch(`${base}/settings/sso/test`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(c) }).then(ok);
 
+// AspireUI's own GitHub App: created from a manifest, it clones, redeploys on push and signs people in.
+export interface GitHubAppStatus {
+  configured: boolean; appId?: number; slug?: string; owner?: string; htmlUrl?: string; installUrl?: string;
+  baseUrl?: string; webhookUrl?: string; webhookActive?: boolean; callbackUrl?: string;
+  loginEnabled: boolean; pollMinutes: number;
+  installations?: { id: number; account: string; htmlUrl: string }[] | null; error?: string | null;
+}
+export interface GitHubRepo { fullName: string; cloneUrl: string; private: boolean; defaultBranch: string }
+export const githubApp = (): Promise<GitHubAppStatus> => fetch(`${base}/github/app`).then(ok);
+export const githubAppNewUrl = (o: { baseUrl: string; name?: string; org?: string; webhook: boolean }): string =>
+  `${base}/github/app/new?` + new URLSearchParams({ baseUrl: o.baseUrl, name: o.name ?? "", org: o.org ?? "", webhook: String(o.webhook) });
+export const setGitHubSettings = (b: { loginEnabled?: boolean; pollMinutes?: number }): Promise<void> =>
+  fetch(`${base}/github/settings`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(b) }).then(okVoid);
+export const forgetGitHubApp = (): Promise<void> => fetch(`${base}/github/app`, { method: "DELETE" }).then(okVoid);
+export const githubRepos = (): Promise<{ configured: boolean; repos: GitHubRepo[] }> => fetch(`${base}/github/repos`).then(ok);
+export const githubLoginStatus = (): Promise<{ enabled: boolean }> => fetch(`${base}/auth/github`).then(okAuth);
+export const githubStartUrl = (o: { next?: string; link?: boolean } = {}): string =>
+  `${base}/auth/github/start?` + new URLSearchParams({ next: o.next ?? "/", ...(o.link ? { link: "true" } : {}) });
+export const myGitHub = (): Promise<{ login?: string | null; available: boolean }> => fetch(`${base}/me/github`).then(ok);
+export const unlinkGitHub = (): Promise<void> => fetch(`${base}/me/github`, { method: "DELETE" }).then(okVoid);
+
 export const logout = (): Promise<void> => fetch(`${base}/auth/logout`, { method: "POST" }).then(() => undefined);
 export const envHealth = (): Promise<EnvHealth> => fetch(`${base}/env/health`).then(okAuth);
 
@@ -500,8 +521,10 @@ export const gitImport = (b: { url: string; branch?: string; subdir?: string; na
   fetch(`${base}/git/import`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(b) }).then(ok);
 export const gitBranches = (url: string, authToken?: string): Promise<{ branches: string[] }> =>
   fetch(`${base}/git/branches`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ url, authToken }) }).then(ok);
-export const gitInfo = (stackId: string): Promise<{ url: string; branch?: string | null; subdir?: string | null; webhookPath: string } | null> =>
+export const gitInfo = (stackId: string): Promise<{ url: string; branch?: string | null; subdir?: string | null; webhookPath: string; autoDeploy?: boolean; githubApp?: boolean; commit?: string | null } | null> =>
   fetch(`${base}/stacks/${stackId}/git`).then(r => r.ok ? r.json() : null);
+export const setGitAutoDeploy = (stackId: string, enabled: boolean): Promise<void> =>
+  fetch(`${base}/stacks/${stackId}/git/auto-deploy`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ enabled }) }).then(okVoid);
 export const gitPull = (stackId: string): Promise<{ stackId: string; redeployed: boolean }> =>
   fetch(`${base}/stacks/${stackId}/git/pull`, { method: "POST" }).then(ok);
 export const listVolumes = (depId: string): Promise<{ name: string; sizeMb: number }[]> =>
