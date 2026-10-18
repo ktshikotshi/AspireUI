@@ -46,6 +46,17 @@ public class ImportTests
     }
 
     [Fact]
+    public void Without_a_sidecar_nodes_are_spread_out_not_stacked()
+    {
+        var code = new CodeGenService().GenerateProgram(Fixture());
+
+        var back = new ImportService().Import("s1", "Demo", code, "{}");
+
+        Assert.Equal(back.Nodes.Count, back.Nodes.Select(n => (n.X, n.Y)).Distinct().Count());
+        Assert.DoesNotContain(back.Nodes, n => n.X == 0 && n.Y == 0);
+    }
+
+    [Fact]
     public void FluentChain_ParsesNodeWithChain()
     {
         const string code = """

@@ -153,14 +153,16 @@ public class HostingService(DeploymentStore store, PublishService publish, Deplo
     // Aspire publishes AddDockerfile resources as `image: ${X_IMAGE}` with no build section; add one so compose builds locally instead of trying to pull.
     public static string InjectDockerfileBuilds(string yaml, StackModel stack, string srcDir)
     {
-        var builds = new Dictionary<string, (string ctx, string? df)>(StringComparer.OrdinalIgnoreCase);
+        var builds = new Dictionary<string, (string ctx, string? df, List<(string, string)> buildArgs)>(StringComparer.OrdinalIgnoreCase);
         foreach (var n in stack.Nodes.Where(n => n.AddMethod == "AddDockerfile"))
         {
             var key = Regex.Replace(n.ResourceName.ToUpperInvariant(), "[^A-Z0-9]", "_") + "_IMAGE";
             var args = n.AddArgs ?? new();
             var ctx = args.Count > 0 ? args[0].Trim().Trim('"') : ".";
             var df = args.Count > 1 ? args[1].Trim().Trim('"') : null;
-            builds[key] = (ctx, df);
+            var buildArgs = n.WithCalls.Where(w => w.Method == "WithBuildArg" && w.Args.Count == 2 && w.Args[1].StartsWith('"'))
+                .Select(w => (Unquote(w.Args[0]), Unquote(w.Args[1]))).ToList();
+            builds[key] = (ctx, df, buildArgs);
         }
         if (builds.Count == 0) return yaml;
 
@@ -172,6 +174,11 @@ public class HostingService(DeploymentStore store, PublishService publish, Deplo
             var abs = Path.GetFullPath(Path.Combine(srcDir, b.ctx.Replace('/', Path.DirectorySeparatorChar))).Replace('\\', '/');
             var ins = new List<string> { "    build:", $"      context: \"{abs}\"" };
             if (b.df is not null) ins.Add($"      dockerfile: \"{b.df}\"");
+            if (b.buildArgs.Count > 0)
+            {
+                ins.Add("      args:");
+                foreach (var (k, v) in b.buildArgs) ins.Add($"        {k}: {JsonSerializer.Serialize(v)}");
+            }
             lines.InsertRange(i + 1, ins);
             i += ins.Count;
         }

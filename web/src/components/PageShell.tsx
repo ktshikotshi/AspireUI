@@ -64,7 +64,7 @@ export function PageShell({ title, back = true, actions, children, container = "
             </Tooltip>
             <Text size="xs" c="dimmed">·</Text>
             <Tooltip label="GitHub" withArrow>
-              <ActionIcon component="a" href="https://github.com/fgilde/AspireUI" target="_blank" rel="noreferrer" variant="subtle" color="gray" size="sm" aria-label="GitHub">
+              <ActionIcon component="a" href="https://github.com/ktshikotshi/AspireUI" target="_blank" rel="noreferrer" variant="subtle" color="gray" size="sm" aria-label="GitHub">
                 <IconBrandGithub size={15} />
               </ActionIcon>
             </Tooltip>
