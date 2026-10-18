@@ -177,6 +177,39 @@ public class ApiTests : IClassFixture<TestWebAppFactory>
     }
 
     [Fact]
+    public async Task An_unlocked_AppHost_goes_back_to_its_own_code()
+    {
+        // "Edit anyway" regenerated Program.cs over the graph; a real AppHost's graph doesn't build.
+        const string program = """
+            var builder = DistributedApplication.CreateBuilder(args);
+            builder.AddRedis("cache");
+            builder.Build().Run();
+            """;
+        var sources = new List<SourceFileDto>
+        {
+            new("Demo.AppHost/AppHost.cs", B64(program)),
+            new("Demo.AppHost/Demo.AppHost.csproj", B64("""<Project Sdk="Aspire.AppHost.Sdk/13.5.2"></Project>""")),
+        };
+        var resp = await _c.PostAsJsonAsync("/api/import/local", new LocalImportRequestDto("Relock", "apphost", sources));
+        resp.EnsureSuccessStatusCode();
+        var stack = (await resp.Content.ReadFromJsonAsync<StackModel>())!;
+        // What the editor's unlock used to send: the AppHost path dropped as well.
+        (await _c.PutAsJsonAsync($"/api/stacks/{stack.Id}", stack with { RunAsIs = false, AppHostProject = null })).EnsureSuccessStatusCode();
+        var dir = Path.Combine(_f.WorkspaceDir, stack.Id);
+        Assert.True(File.Exists(Path.Combine(dir, "Program.cs")));
+
+        var restored = await _c.PostAsync($"/api/stacks/{stack.Id}/as-is", null);
+        restored.EnsureSuccessStatusCode();
+
+        var got = (await _c.GetFromJsonAsync<StackModel>($"/api/stacks/{stack.Id}"))!;
+        Assert.True(got.RunAsIs);
+        Assert.Equal("Demo.AppHost/Demo.AppHost.csproj", got.AppHostProject);
+        Assert.False(File.Exists(Path.Combine(dir, "Program.cs")));
+        Assert.False(File.Exists(Path.Combine(dir, "Relock.csproj")));
+        Assert.Equal(program, await File.ReadAllTextAsync(Path.Combine(dir, "Demo.AppHost/AppHost.cs")));
+    }
+
+    [Fact]
     public async Task LocalImport_NoAppHostNoCompose_Returns422()
     {
         var sources = new List<SourceFileDto> { new("Foo.cs", B64("public class Foo { }")) };

@@ -91,17 +91,18 @@ public static class GitService
 
     public static string? FindCompose(string dir) => ComposeNames.Select(f => Path.Combine(dir, f)).FirstOrDefault(File.Exists);
 
-    public static string? FindAppHostRel(string dir)
+    public static string? FindAppHostRel(string dir, string? except = null)
     {
-        var p = FindAppHost(dir);
+        var p = FindAppHost(dir, except is null ? null : Path.GetFullPath(Path.Combine(dir, except)));
         return p is null ? null : Path.GetRelativePath(dir, p).Replace('\\', '/');
     }
 
-    private static string? FindAppHost(string root)
+    private static string? FindAppHost(string root, string? except = null)
     {
         foreach (var csproj in Directory.EnumerateFiles(root, "*.csproj", SearchOption.AllDirectories))
         {
             if (csproj.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar).Any(SkipDirs.Contains)) continue;
+            if (except is not null && Path.GetFullPath(csproj) == except) continue;
             var text = File.ReadAllText(csproj);
             if (text.Contains("Aspire.AppHost.Sdk", StringComparison.OrdinalIgnoreCase)
                 || text.Contains("<IsAspireHost>true", StringComparison.OrdinalIgnoreCase))

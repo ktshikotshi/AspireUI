@@ -178,6 +178,31 @@ public class CodeGenService
         return result;
     }
 
+    /// <summary>The project file codegen writes at the root of a stack's folder.</summary>
+    public static string ProjectFileName(StackModel s) => SafeName(s) + ".csproj";
+
+    private static string SafeName(StackModel s) =>
+        string.Concat(s.Name.Select(c => Path.GetInvalidFileNameChars().Contains(c) ? '_' : c));
+
+    /// <summary>
+    /// Takes an imported AppHost back to running as written after "Edit anyway": the generated
+    /// Program.cs, project and layout file at the root go, the user's own files were never touched.
+    /// Returns the AppHost project to run, or null when the folder holds none of the user's own.
+    /// </summary>
+    public static string? RestoreAsIs(StackModel s, string dir)
+    {
+        var generated = ProjectFileName(s);
+        var appHost = s.AppHostProject is { Length: > 0 } a && File.Exists(Path.Combine(dir, a)) ? a
+            : GitService.FindAppHostRel(dir, except: generated);
+        if (appHost is null) return null;
+        var program = Path.Combine(dir, "Program.cs");
+        if (File.Exists(program) && File.ReadAllText(program).Contains(Begin)) File.Delete(program);
+        if (!string.Equals(appHost, generated, StringComparison.OrdinalIgnoreCase))
+            foreach (var f in new[] { generated, "aspireui.json" })
+                if (File.Exists(Path.Combine(dir, f))) File.Delete(Path.Combine(dir, f));
+        return appHost;
+    }
+
     public void Materialize(StackModel s, string dir, PublishEnv? env = null)
     {
         Directory.CreateDirectory(dir);
@@ -187,7 +212,7 @@ public class CodeGenService
             return;
         }
         File.WriteAllText(Path.Combine(dir, "Program.cs"), GenerateProgram(s, env));
-        var safeName = string.Concat(s.Name.Select(c => Path.GetInvalidFileNameChars().Contains(c) ? '_' : c));
+        var safeName = SafeName(s);
         if (!s.FromGit && !s.HasSource)
             foreach (var old in Directory.GetFiles(dir, "*.csproj"))
                 try { File.Delete(old); } catch { }
