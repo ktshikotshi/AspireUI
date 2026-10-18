@@ -109,9 +109,28 @@ public class ComposeImporter
         _ => (null, null),
     };
 
-    // Last resort for a service that declares no ports and no expose: the EXPOSE of the Dockerfile it
-    // builds from. Without any port the imported app runs but is unreachable — compose files that put
-    // the app behind their own reverse proxy (Caddy/nginx) look exactly like that.
+    // `build.args` — the values a Dockerfile's ARG lines expect. Dropping them built the image with
+    // every ARG empty, which fails any Dockerfile that names its project or version through one.
+    private static IEnumerable<(string, string)> ReadBuildArgs(object? build)
+    {
+        if (build is not IDictionary<object, object> d || !d.TryGetValue("args", out var args)) yield break;
+        if (args is List<object> list)
+            foreach (var item in list)
+            {
+                var s = item?.ToString() ?? "";
+                var eq = s.IndexOf('=');
+                if (eq > 0) yield return (s[..eq], s[(eq + 1)..]);
+            }
+        else if (args is IDictionary<object, object> map)
+            foreach (var (k, v) in map)
+                if (k?.ToString() is { Length: > 0 } key) yield return (key, v?.ToString() ?? "");
+    }
+
+    // Last resort for a compose file in which no service declares ports or expose: the EXPOSE of the
+    // Dockerfile a service builds from. Without any port the imported app runs but is unreachable.
+    // Once anything in the file is reachable — a Caddy/nginx in front, a web service with `ports:` —
+    // the services without ports are internal on purpose (a worker, an API behind the proxy), and
+    // giving them their EXPOSE published host ports nobody asked for.
     public static int? DockerfilePort(string? srcDir, string? context, string? dockerfile)
     {
         if (string.IsNullOrWhiteSpace(srcDir)) return null;
@@ -144,6 +163,9 @@ public class ComposeImporter
 
         if (file?.Services is not { Count: > 0 }) return (null, "No services found in the compose file.");
 
+        var anyReachable = file.Services
+            .Where(kv => include is null || include.Contains(kv.Key))
+            .Any(kv => (kv.Value.Ports?.Count ?? 0) > 0 || ReadExpose(kv.Value.Expose).Any());
         var nodes = new List<NodeModel>();
         var nameToId = new Dictionary<string, string>();
         var used = new HashSet<string>(StringComparer.Ordinal);
@@ -205,13 +227,17 @@ public class ComposeImporter
                 if (buildContext is null) continue;
                 addMethod = "AddDockerfile";
                 addArgs = buildFile is null ? [Quote(buildContext)] : [Quote(buildContext), Quote(buildFile)];
+                foreach (var (k, v) in ReadBuildArgs(def.Build))
+                    withs.Add(new WithCall("WithBuildArg", [Quote(k), Quote(v)]));
             }
 
             if (endpointTargets.Count == 0)
             {
                 var fallback = servicePorts is not null && servicePorts.TryGetValue(svc, out var chosen) && chosen > 0
                     ? chosen
-                    : DockerfilePort(srcDir, buildContext, buildFile);
+                    // An image service is not built from the repository, so the repository's
+                    // Dockerfile says nothing about its ports.
+                    : anyReachable || buildContext is null ? null : DockerfilePort(srcDir, buildContext, buildFile);
                 if (fallback is > 0) withs.Insert(0, new WithCall("WithHttpEndpoint", [$"targetPort: {fallback}"]));
             }
 
