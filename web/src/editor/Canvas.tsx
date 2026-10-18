@@ -223,7 +223,8 @@ export function Canvas({ stack, setStack, onSelect, onSelectIds, onShowPropertie
   const onLogs = useCallback((name: string, display: string) => setLogTarget({ name, display }), []);
 
   const annoOps = useMemo(() => {
-    const save = (patch: Partial<Stack>) => api.saveStack({ ...stack, ...patch }).then(setStack);
+    // Notes and groups are canvas furniture, not code.
+    const save = (patch: Partial<Stack>) => api.saveLayout({ ...stack, ...patch }).then(setStack);
     const gid = (p: string) => p + rid();
     return {
       addNote: () => save({ notes: [...(stack.notes ?? []), { id: gid("note:"), text: "", x: 80, y: 80 }] }),
@@ -273,7 +274,7 @@ export function Canvas({ stack, setStack, onSelect, onSelectIds, onShowPropertie
     const managedLabels = new Set(managed.map(g => g.label.toLowerCase()));
     const groups = [...existing.filter(g => !managedLabels.has(g.label.toLowerCase())), ...managed];
     const nodes = stack.nodes.map(n => moved.has(n.id) ? { ...n, ...moved.get(n.id)! } : n);
-    api.saveStack({ ...stack, groups, nodes }).then(s => { setStack(s); toastOk(`Grouped into ${managed.length}`); }).catch(toastErr);
+    api.saveLayout({ ...stack, groups, nodes }).then(s => { setStack(s); toastOk(`Grouped into ${managed.length}`); }).catch(toastErr);
   }, [stack, setStack, autoCat, autoPresets]);
 
   // Deleting a group with resources inside asks whether to delete them too or just ungroup.
@@ -385,7 +386,7 @@ export function Canvas({ stack, setStack, onSelect, onSelectIds, onShowPropertie
     stack.edges.forEach(e => { if (e.fromNodeId !== e.toNodeId) g.setEdge(e.fromNodeId, e.toNodeId); });
     dagre.layout(g);
     const nodes = stack.nodes.map(n => { const p = g.node(n.id); return { ...n, x: Math.round(p.x - 85), y: Math.round(p.y - 37) }; });
-    api.saveStack({ ...stack, nodes }).then(s => { setStack(s); toastOk("Layout arranged"); }).catch(toastErr);
+    api.saveLayout({ ...stack, nodes }).then(s => { setStack(s); toastOk("Layout arranged"); }).catch(toastErr);
   }, [stack, setStack]);
 
   const { deleteOne, deleteMany, dialog: deleteDialog } = useResourceDelete(stack, setStack, () => onSelect(null));
@@ -473,7 +474,7 @@ export function Canvas({ stack, setStack, onSelect, onSelectIds, onShowPropertie
       if (c.dragging === false) {
         const tdx = c.position.x - d.sx, tdy = c.position.y - d.sy;
         const nodes = stack.nodes.map(n => d!.members.includes(n.id) ? { ...n, x: n.x + tdx, y: n.y + tdy } : n);
-        api.saveStack({ ...stack, nodes, groups: (stack.groups ?? []).map(gg => gg.id === c.id ? { ...gg, x: c.position.x, y: c.position.y } : gg) }).then(setStack);
+        api.saveLayout({ ...stack, nodes, groups: (stack.groups ?? []).map(gg => gg.id === c.id ? { ...gg, x: c.position.x, y: c.position.y } : gg) }).then(setStack);
         delete groupDrag.current[c.id];
       }
     }
@@ -489,18 +490,18 @@ export function Canvas({ stack, setStack, onSelect, onSelectIds, onShowPropertie
         annoDirty = true;
       }
     }
-    if (annoDirty) api.saveStack({ ...stack, notes, groups }).then(setStack);
+    if (annoDirty) api.saveLayout({ ...stack, notes, groups }).then(setStack);
 
     const moved = changes.filter(c => c.type === "position" && c.dragging === false && !isAnno(c.id) && c.position);
     if (moved.length > 0) {
       const at = new Map(moved.map(c => [c.id, c.position]));
       const nodes = stack.nodes.map(n => at.has(n.id) ? { ...n, x: at.get(n.id).x, y: at.get(n.id).y } : n);
-      api.saveStack({ ...stack, nodes }).then(setStack);
+      api.saveLayout({ ...stack, nodes }).then(setStack);
     }
     const removed = changes.filter(c => c.type === "remove");
     const removedAnno = removed.filter(c => isAnno(c.id));
     if (removedAnno.length > 0)
-      api.saveStack({ ...stack,
+      api.saveLayout({ ...stack,
         notes: (stack.notes ?? []).filter(n => !removedAnno.some(c => c.id === n.id)),
         groups: (stack.groups ?? []).filter(g => !removedAnno.some(c => c.id === g.id)) }).then(setStack);
     const removedNodes = removed.filter(c => !isAnno(c.id) && !suppress.includes(c));

@@ -113,6 +113,41 @@ public class ApiTests : IClassFixture<TestWebAppFactory>
     }
 
     [Fact]
+    public async Task Layout_of_an_imported_AppHost_saves_without_unlocking_or_rewriting_it()
+    {
+        // Moving a node or adding a note used to go through the full save, which asked to unlock the
+        // editor first, and unlocking regenerated the AppHost over the user's own code.
+        const string program = """
+            var builder = DistributedApplication.CreateBuilder(args);
+            builder.AddRedis("cache"); // the user's own comment
+            builder.Build().Run();
+            """;
+        var sources = new List<SourceFileDto>
+        {
+            new("Demo.AppHost/AppHost.cs", B64(program)),
+            new("Demo.AppHost/Demo.AppHost.csproj", B64("""<Project Sdk="Aspire.AppHost.Sdk/13.5.2"></Project>""")),
+        };
+        var resp = await _c.PostAsJsonAsync("/api/import/local", new LocalImportRequestDto("LayoutStack", "apphost", sources));
+        resp.EnsureSuccessStatusCode();
+        var stack = (await resp.Content.ReadFromJsonAsync<StackModel>())!;
+
+        var moved = stack with
+        {
+            Nodes = stack.Nodes.Select(n => n with { X = 500, Y = 300, AddMethod = "AddPostgres" }).ToList(),
+            Notes = [new StackNote("n1", "remember", 10, 10)],
+        };
+        var put = await _c.PutAsJsonAsync($"/api/stacks/{stack.Id}/layout", moved);
+        put.EnsureSuccessStatusCode();
+
+        var got = (await _c.GetFromJsonAsync<StackModel>($"/api/stacks/{stack.Id}"))!;
+        Assert.True(got.RunAsIs);
+        Assert.All(got.Nodes, n => Assert.Equal((500d, 300d), (n.X, n.Y)));
+        Assert.All(got.Nodes, n => Assert.NotEqual("AddPostgres", n.AddMethod));   // only the layout is taken
+        Assert.Single(got.Notes!);
+        Assert.Equal(program, await File.ReadAllTextAsync(Path.Combine(_f.WorkspaceDir, stack.Id, "Demo.AppHost/AppHost.cs")));
+    }
+
+    [Fact]
     public async Task LocalImport_NoAppHostNoCompose_Returns422()
     {
         var sources = new List<SourceFileDto> { new("Foo.cs", B64("public class Foo { }")) };
