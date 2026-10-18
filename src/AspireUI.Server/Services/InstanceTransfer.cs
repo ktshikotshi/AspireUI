@@ -117,6 +117,9 @@ public static class InstanceTransfer
             if (key.StartsWith("git:", StringComparison.OrdinalIgnoreCase)
                 || key.StartsWith("githook:", StringComparison.OrdinalIgnoreCase)
                 || key.StartsWith("gitenv:", StringComparison.OrdinalIgnoreCase)
+                // The GitHub App is this instance's: its webhook and callbacks name this address.
+                || key.StartsWith("GitHubApp", StringComparison.OrdinalIgnoreCase)
+                || key.StartsWith("gitsha:", StringComparison.OrdinalIgnoreCase)
                 || key.StartsWith("clonehook:", StringComparison.OrdinalIgnoreCase)
                 || key.StartsWith("hook:", StringComparison.OrdinalIgnoreCase)
                 || key.Equals("hooks", StringComparison.OrdinalIgnoreCase)

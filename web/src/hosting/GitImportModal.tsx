@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Modal, Title, Stack, TextInput, NumberInput, PasswordInput, Autocomplete, Group, Button, Text, Alert, Radio, Badge, Checkbox, Loader, Center, Progress } from "@mantine/core";
+import { Modal, Title, Stack, TextInput, NumberInput, PasswordInput, Autocomplete, Group, Button, Text, Alert, Radio, Badge, Checkbox, Loader, Center, Progress, Select } from "@mantine/core";
 import { IconBrandGithub, IconAlertTriangle, IconArrowLeft, IconLock } from "@tabler/icons-react";
 import * as api from "../api";
 import { toastOk, toastErr } from "../ui";
@@ -140,6 +140,10 @@ export function GitImportModal({ onClose, onImported, local, hosting }: { onClos
   const [uploadPct, setUploadPct] = useState<number | null>(null);
   const [image, setImage] = useState("");
   const [port, setPort] = useState<number | "">("");
+  // Repositories the GitHub App is installed on: picked from a list, cloned with the app's own tokens.
+  const [ghRepos, setGhRepos] = useState<api.GitHubRepo[] | null>(null);
+  useEffect(() => { if (!local) api.githubRepos().then(r => setGhRepos(r.configured ? r.repos : null)).catch(() => setGhRepos(null)); }, [local]);
+  const viaApp = !!ghRepos?.some(r => url.trim().replace(/\.git$/, "").toLowerCase() === `https://github.com/${r.fullName}`.toLowerCase());
 
   const req = () => ({ url: url.trim(), branch: branch.trim() || undefined, subdir: subdir.trim() || undefined, authToken: authToken.trim() || undefined });
   const contentsOf = (files: string[]) => (detected?.composeFiles ?? []).filter(f => files.includes(f.path)).map(f => f.content);
@@ -291,6 +295,19 @@ export function GitImportModal({ onClose, onImported, local, hosting }: { onClos
           </Text>
           <TextInput label="Stack name" placeholder="auto from repo name if blank" value={name}
             onChange={e => setName(e.currentTarget.value)} />
+          {ghRepos && ghRepos.length > 0 && (
+            <Select label="From the GitHub App" placeholder="pick a repository" searchable clearable
+              leftSection={<IconBrandGithub size={14} />}
+              data={ghRepos.map(r => ({ value: r.fullName, label: r.fullName + (r.private ? " (private)" : "") }))}
+              value={ghRepos.find(r => `https://github.com/${r.fullName}`.toLowerCase() === url.trim().replace(/\.git$/, "").toLowerCase())?.fullName ?? null}
+              onChange={v => {
+                const r = ghRepos.find(x => x.fullName === v);
+                if (!r) return;
+                setUrl(`https://github.com/${r.fullName}`);
+                if (!name.trim()) setName(r.fullName.split("/")[1]);
+              }}
+              comboboxProps={{ zIndex: 500, withinPortal: true }} />
+          )}
           <TextInput label="Repository URL" placeholder="https://github.com/user/repo" value={url}
             onChange={e => setUrl(e.currentTarget.value)} onBlur={() => { loadBranches(); if (!name.trim()) setName(repoName(url)); }} data-autofocus />
           <Group grow>
@@ -302,11 +319,13 @@ export function GitImportModal({ onClose, onImported, local, hosting }: { onClos
               comboboxProps={{ zIndex: 500, withinPortal: true }} />
             <TextInput label="Subdirectory" placeholder="repo root" value={subdir} onChange={e => setSubdir(e.currentTarget.value)} />
           </Group>
-          <PasswordInput label="Access token" leftSection={<IconLock size={14} />}
+          {viaApp
+            ? <Alert color="green" p="xs" icon={<IconBrandGithub size={15} />}>The GitHub App can read this repository — no token needed.</Alert>
+            : <PasswordInput label="Access token" leftSection={<IconLock size={14} />}
             placeholder="only for private repos — leave blank for public"
             value={authToken} onChange={e => setAuthToken(e.currentTarget.value)}
-            description="A read-only personal access token (GitHub/GitLab/Gitea). Stored with the stack for updates. Use a scoped token, not your main one." />
-          <Alert color="gray" p="xs" icon={<IconAlertTriangle size={15} />}>Public repos work without a token. HTTPS only.</Alert>
+            description="A read-only personal access token (GitHub/GitLab/Gitea). Stored with the stack for updates. Use a scoped token, not your main one." />}
+          {!viaApp && <Alert color="gray" p="xs" icon={<IconAlertTriangle size={15} />}>Public repos work without a token. HTTPS only.</Alert>}
           <Group justify="flex-end">
             <Button variant="default" onClick={onClose}>Cancel</Button>
             <Button loading={busy} onClick={inspect}>Continue</Button>
