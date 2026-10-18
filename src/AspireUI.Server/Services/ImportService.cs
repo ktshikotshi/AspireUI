@@ -100,10 +100,13 @@ public class ImportService
             raws.Add(st.ToString().Trim());
         }
 
-        // Restore positions from sidecar (keyed by node id).
-        for (int i = 0; i < nodes.Count; i++)
-            if (positions.TryGetValue(nodes[i].Id, out var xy) && xy.Length == 2)
-                nodes[i] = nodes[i] with { X = xy[0], Y = xy[1] };
+        // Restore positions from sidecar (keyed by node id). A node the sidecar does not place — every
+        // node of an AppHost imported from Git, which has no sidecar — goes on the same grid the compose
+        // import uses; left at (0,0) they all sat on top of each other.
+        for (int i = 0, unplaced = 0; i < nodes.Count; i++)
+            nodes[i] = positions.TryGetValue(nodes[i].Id, out var xy) && xy.Length == 2
+                ? nodes[i] with { X = xy[0], Y = xy[1] }
+                : nodes[i] with { X = 60 + (unplaced % 3) * 320, Y = 60 + (unplaced++ / 3) * 200 };
 
         return new StackModel(id, name, "net10.0", nodes, edges, raws, [], []);
     }
