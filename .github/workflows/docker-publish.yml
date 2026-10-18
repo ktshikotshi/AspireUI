@@ -1,7 +1,7 @@
 name: Publish Docker image
 
 # Builds the AspireUI container and publishes it to GitHub Container Registry
-# (ghcr.io/fgilde/aspireui) so anyone can `docker run` / reference it as an Aspire resource
+# (ghcr.io/<repository owner>/aspireui, so a fork publishes its own) so anyone can `docker run` / reference it as an Aspire resource
 # without building locally. Pushes :latest for master, a version tag for git tags, and a
 # short-sha tag for every build.
 #
@@ -51,7 +51,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/fgilde/aspireui
+          images: ghcr.io/${{ github.repository_owner }}/aspireui
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
             type=ref,event=tag
@@ -113,7 +113,7 @@ jobs:
       - name: Start the arm64 image and wait for the web UI
         run: |
           set -euo pipefail
-          image="ghcr.io/fgilde/aspireui@${{ needs.build-push.outputs.digest }}"
+          image="ghcr.io/${{ github.repository_owner }}/aspireui@${{ needs.build-push.outputs.digest }}"
           docker run -d --name aspireui -p 8080:8080 "$image"
           for i in $(seq 1 60); do
             code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 http://localhost:8080/ || true)"

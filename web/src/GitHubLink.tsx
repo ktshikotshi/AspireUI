@@ -1,7 +1,7 @@
 import { ActionIcon, Tooltip } from "@mantine/core";
 import { IconBrandGithub } from "@tabler/icons-react";
 
-export const REPO_URL = "https://github.com/fgilde/AspireUI";
+export const REPO_URL = "https://github.com/ktshikotshi/AspireUI";
 
 export function GitHubLink() {
   return (
