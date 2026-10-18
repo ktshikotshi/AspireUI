@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Group, Button, PasswordInput, Stack as MStack, Text, Alert, Avatar, Badge, Divider, Paper } from "@mantine/core";
-import { IconCheck, IconAlertCircle } from "@tabler/icons-react";
+import { IconCheck, IconAlertCircle, IconBrandGithub } from "@tabler/icons-react";
 import { PageShell } from "../components/PageShell";
 import { useAuth } from "../auth/AuthContext";
 import * as api from "../api";
@@ -70,6 +70,29 @@ export function Profile() {
 
           <Divider my="xl" />
           <TwoFactorCard />
+          <GitHubLinkCard />
     </PageShell>
+  );
+}
+
+// A GitHub account linked here is what "Sign in with GitHub" accepts — nobody else's.
+function GitHubLinkCard() {
+  const [me, setMe] = useState<{ login?: string | null; available: boolean } | null>(null);
+  const load = () => api.myGitHub().then(setMe).catch(() => setMe(null));
+  useEffect(() => { load(); }, []);
+  if (!me?.available) return null;
+  return (
+    <>
+      <Divider my="xl" label="GitHub" labelPosition="left" />
+      <Group justify="space-between">
+        <Group gap={8}>
+          <IconBrandGithub size={18} />
+          <Text size="sm">{me.login ? <>Linked to <b>{me.login}</b></> : "Not linked — link it to sign in with GitHub."}</Text>
+        </Group>
+        {me.login
+          ? <Button size="xs" variant="default" onClick={() => api.unlinkGitHub().then(load)}>Unlink</Button>
+          : <Button size="xs" component="a" href={api.githubStartUrl({ link: true, next: "/profile" })}>Link GitHub account</Button>}
+      </Group>
+    </>
   );
 }
