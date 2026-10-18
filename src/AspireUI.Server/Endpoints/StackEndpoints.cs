@@ -375,6 +375,24 @@ public static class StackEndpoints
             return Results.NoContent();
         }).RequirePerm(Perm.OpenEditor);
 
+        // Where things sit on the canvas, and nothing else: node positions, notes, groups. It changes no
+        // code, so it is allowed on a run-as-is import (whose code must never be regenerated) and on a
+        // running app, and skips the compile check a best-effort parse of someone's AppHost can fail.
+        app2.MapPut("/stacks/{id}/layout", (string id, StackModel body) =>
+        {
+            if (store.Get(id) is not { } s) return Results.NotFound();
+            var at = (body.Nodes ?? []).ToDictionary(n => n.Id, n => (n.X, n.Y));
+            var updated = s with
+            {
+                Nodes = s.Nodes.Select(n => at.TryGetValue(n.Id, out var p) ? n with { X = p.X, Y = p.Y } : n).ToList(),
+                Notes = body.Notes,
+                Groups = body.Groups,
+            };
+            store.Save(updated);
+            if (!updated.RunAsIs) gen.Materialize(updated, Dir(id));
+            return Results.Ok(updated);
+        }).RequirePerm(Perm.OpenEditor);
+
         app2.MapPatch("/stacks/{id}/nodes/{nodeId}", (string id, string nodeId, NodeModel patch) =>
         {
             if (LockGuard(id) is { } r) return r;
