@@ -99,11 +99,15 @@ COPY --from=build /app .
 
 ENV ASPNETCORE_URLS=http://0.0.0.0:8080 \
     DB_PATH=/data/aspireui.db \
-    WORKSPACE_DIR=/data/workspace
+    WORKSPACE_DIR=/data/workspace \
+    # Where `dotnet dev-certs https --trust` puts the dev cert for OpenSSL (see the entrypoint).
+    SSL_CERT_DIR=/root/.aspnet/dev-certs/trust:/usr/lib/ssl/certs
 
 # Published apps read ASPNETCORE_URLS from the environment; launchSettings.json
 # (which has the dev port 5158) only applies to `dotnet run`.
 EXPOSE 8080
 VOLUME ["/data"]
 
-ENTRYPOINT ["dotnet", "AspireUI.Server.dll"]
+# Run starts AppHosts in this container, and the Aspire dashboard warns "No trusted development
+# certificate" without one. Made at start rather than at build so no two containers share a key.
+ENTRYPOINT ["sh", "-c", "dotnet dev-certs https --check --trust >/dev/null 2>&1 || dotnet dev-certs https --trust >/dev/null 2>&1; exec dotnet AspireUI.Server.dll \"$@\"", "aspireui"]
