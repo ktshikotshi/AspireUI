@@ -51,6 +51,13 @@ RUN apt-get update \
          -o /usr/local/lib/docker/cli-plugins/docker-compose \
     && chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
 
+# Node.js: Run starts the AppHost inside this container, and JavaScript resources
+# (AddViteApp, AddNodeApp, AddJavaScriptApp, ...) shell `npm install` / `npm run`.
+RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
+    && apt-get install -y --no-install-recommends nodejs \
+    && rm -rf /var/lib/apt/lists/* \
+    && node --version && npm --version
+
 # The Aspire CLI (keep in sync with the Aspire.Hosting.* version in Directory.Packages.props) —
 # Hosting's compose publish shells it. Taken from the RID-specific NuGet package (a single
 # self-contained binary) instead of `dotnet tool install`, because the SDK's tool installer runs
