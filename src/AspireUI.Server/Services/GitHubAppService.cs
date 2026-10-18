@@ -90,24 +90,29 @@ public class GitHubAppService(SettingsStore settings, SecretStore secrets)
 
     /// <summary>
     /// The manifest GitHub turns into an app. Read access to code is all a deployment needs; the push
-    /// event is what redeploys. Without a public address the webhook is created inactive — GitHub
-    /// would only collect failed deliveries — and polling does the job instead.
+    /// event is what redeploys. Without a public address the manifest has no webhook at all and
+    /// polling does the job instead: GitHub refuses a manifest whose hook URL it cannot reach (such as
+    /// localhost), even one marked inactive, and subscribing to events needs a webhook.
     /// </summary>
     public static string Manifest(string name, string baseUrl, bool publicWebhook)
     {
         var root = baseUrl.TrimEnd('/');
-        return new JsonObject
+        var manifest = new JsonObject
         {
             ["name"] = name,
             ["url"] = root,
-            ["hook_attributes"] = new JsonObject { ["url"] = root + "/api/github/webhook", ["active"] = publicWebhook },
             ["redirect_url"] = root + "/api/github/app/created",
             ["callback_urls"] = new JsonArray(root + "/api/auth/github/callback"),
             ["setup_url"] = root + "/settings",
             ["public"] = false,
             ["default_permissions"] = new JsonObject { ["contents"] = "read", ["metadata"] = "read" },
-            ["default_events"] = new JsonArray("push"),
-        }.ToJsonString();
+        };
+        if (publicWebhook)
+        {
+            manifest["hook_attributes"] = new JsonObject { ["url"] = root + "/api/github/webhook", ["active"] = true };
+            manifest["default_events"] = new JsonArray("push");
+        }
+        return manifest.ToJsonString();
     }
 
     /// <summary>

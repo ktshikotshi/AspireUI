@@ -80,14 +80,26 @@ public class GitHubAppTests
     [Fact]
     public void The_manifest_asks_for_read_access_and_push_events()
     {
-        using var doc = JsonDocument.Parse(GitHubAppService.Manifest("AspireUI tower", "http://tower.local:8080/", publicWebhook: false));
+        using var doc = JsonDocument.Parse(GitHubAppService.Manifest("AspireUI tower", "https://aspire.example.com/", publicWebhook: true));
         var m = doc.RootElement;
-        Assert.Equal("http://tower.local:8080/api/github/webhook", m.GetProperty("hook_attributes").GetProperty("url").GetString());
-        Assert.False(m.GetProperty("hook_attributes").GetProperty("active").GetBoolean());
-        Assert.Equal("http://tower.local:8080/api/github/app/created", m.GetProperty("redirect_url").GetString());
+        Assert.Equal("https://aspire.example.com/api/github/webhook", m.GetProperty("hook_attributes").GetProperty("url").GetString());
+        Assert.True(m.GetProperty("hook_attributes").GetProperty("active").GetBoolean());
+        Assert.Equal("https://aspire.example.com/api/github/app/created", m.GetProperty("redirect_url").GetString());
         Assert.Equal("read", m.GetProperty("default_permissions").GetProperty("contents").GetString());
         Assert.Equal(["push"], m.GetProperty("default_events").EnumerateArray().Select(e => e.GetString()!).ToArray());
         Assert.False(m.GetProperty("public").GetBoolean());
+    }
+
+    [Fact]
+    public void Without_a_public_address_the_manifest_has_no_webhook()
+    {
+        // GitHub rejects "Hook url is not supported because it isn't reachable over the public
+        // Internet (localhost)" even for an inactive hook, and events need a hook.
+        using var doc = JsonDocument.Parse(GitHubAppService.Manifest("AspireUI localhost", "http://localhost:8085", publicWebhook: false));
+        var m = doc.RootElement;
+        Assert.False(m.TryGetProperty("hook_attributes", out _));
+        Assert.False(m.TryGetProperty("default_events", out _));
+        Assert.Equal("http://localhost:8085/api/auth/github/callback", m.GetProperty("callback_urls")[0].GetString());
     }
 
     [Fact]
