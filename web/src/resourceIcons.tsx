@@ -8,7 +8,7 @@ import {
   siBun, siDeno, siRust, siNgrok, siMeilisearch, siGrafana,
   siJellyfin, siGitea, siNextcloud, siHomeassistant, siSonarr, siRadarr, siQbittorrent,
   siImmich, siPihole, siExcalidraw, siSearxng, siPaperlessngx, siVaultwarden, siMetabase,
-  siLangflow, siNodered, siJaeger, siOnlyoffice, siActualbudget, siFreshrss, siPhp, siWordpress,
+  siLangflow, siNodered, siVite, siNodedotjs, siNextdotjs, siJavascript, siJaeger, siOnlyoffice, siActualbudget, siFreshrss, siPhp, siWordpress,
 } from "simple-icons";
 
 import aspireuiLogo from "./assets/logo.svg";
@@ -231,6 +231,10 @@ const MAP: Record<string, Visual> = {
   AddPythonModule:     { si: siPython, color: "#3776AB" },
   AddPythonExecutable: { si: siPython, color: "#3776AB" },
   AddUvicornApp:       { si: siPython, color: "#3776AB" },
+  AddViteApp:          { si: siVite, color: "#646CFF" },
+  AddJavaScriptApp:    { si: siJavascript, color: "#F7DF1E" },
+  AddNodeApp:          { si: siNodedotjs, color: "#5FA04E" },
+  AddNextJsApp:        { si: siNextdotjs, color: TEXT },
   AddMauiProject:      { si: siDotnet, color: "#512BD4" },
   AddOracle:           { tabler: IconDatabase, color: "#F80000" },
   AddYarp:             { tabler: IconRouter, color: "#68217A" },

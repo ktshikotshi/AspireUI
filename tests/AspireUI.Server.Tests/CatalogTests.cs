@@ -110,4 +110,15 @@ public class CatalogTests
         }
         Assert.Contains(cat.SelectMany(r => r.AddOverloads).SelectMany(o => o.Params), p => !p.Required || true);
     }
+
+    // An imported AppHost's front end (AddViteApp) showed as an unknown node.
+    [Fact]
+    public void JavaScript_apps_are_in_the_catalog()
+    {
+        var cat = new CatalogService().GetCatalog();
+        var vite = cat.Single(r => r.AddMethod == "AddViteApp");
+        Assert.Equal("Vite App", vite.Label);
+        Assert.Equal("Compute", vite.Group);
+        Assert.Contains(cat, r => r.AddMethod == "AddNodeApp");
+    }
 }

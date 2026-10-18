@@ -303,6 +303,34 @@
     "group": "Compute",
     "package": "Aspire.Hosting.Python"
   },
+  "AddViteApp": {
+    "label": "Vite App",
+    "icon": "vite",
+    "group": "Compute",
+    "package": "Aspire.Hosting.JavaScript",
+    "description": "Run a Vite front end (React, Vue, Svelte…) from its folder."
+  },
+  "AddJavaScriptApp": {
+    "label": "JavaScript App",
+    "icon": "javascript",
+    "group": "Compute",
+    "package": "Aspire.Hosting.JavaScript",
+    "description": "Run a JavaScript app with its package manager's scripts."
+  },
+  "AddNodeApp": {
+    "label": "Node.js App",
+    "icon": "node",
+    "group": "Compute",
+    "package": "Aspire.Hosting.JavaScript",
+    "description": "Run a Node.js script."
+  },
+  "AddNextJsApp": {
+    "label": "Next.js App",
+    "icon": "nextjs",
+    "group": "Compute",
+    "package": "Aspire.Hosting.JavaScript",
+    "description": "Run a Next.js app."
+  },
   "AddUvicornApp": {
     "label": "Uvicorn (Python)",
     "icon": "python",
