@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { Badge, Anchor, ActionIcon, Menu, Text, Loader, Alert, Group, Table, Button, Tooltip, Stack as MStack, Card, Center, CopyButton } from "@mantine/core";
+import { Badge, Anchor, ActionIcon, Menu, Text, Loader, Alert, Group, Table, Button, Tooltip, Stack as MStack, Card, Center, CopyButton, Switch } from "@mantine/core";
 import { IconDots, IconExternalLink, IconAlertTriangle, IconFileText, IconPlayerPlay, IconPlayerStop, IconReload, IconServer, IconBrandGithub, IconCopyPlus, IconWorld, IconClockHour4 } from "@tabler/icons-react";
 import { PageShell } from "../components/PageShell";
 import type { Deployment, ServiceStatus, Stack } from "../model";
@@ -33,7 +33,7 @@ export function AppDetail() {
   const [terminal, setTerminal] = useState(false);
   const [files, setFiles] = useState(false);
   const [move, setMove] = useState(false);
-  const [git, setGit] = useState<{ url: string; branch?: string | null; subdir?: string | null; webhookPath: string } | null>(null);
+  const [git, setGit] = useState<Awaited<ReturnType<typeof api.gitInfo>>>(null);
   const [pulling, setPulling] = useState(false);
   useTitle(d?.name ? `${d.name} · Hosting` : "App");
   useEffect(() => { if (id) api.gitInfo(id).then(setGit).catch(() => setGit(null)); }, [id]);
@@ -169,6 +169,15 @@ export function AppDetail() {
                 {({ copied, copy }) => <Button size="compact-xs" variant="subtle" onClick={copy}>{copied ? "Copied" : "Copy"}</Button>}
               </CopyButton>
             </Group>
+            {git.githubApp && (
+              <Switch mt="sm" size="xs" checked={git.autoDeploy !== false}
+                label="Redeploy when this branch gets a push"
+                description={`Through the GitHub App: its push event, or a check every few minutes.${git.commit ? ` Running ${git.commit.slice(0, 7)}.` : ""}`}
+                onChange={e => {
+                  const enabled = e.currentTarget.checked;
+                  api.setGitAutoDeploy(d.stackId, enabled).then(() => setGit({ ...git, autoDeploy: enabled })).catch(toastErr);
+                }} />
+            )}
           </Card>
         )}
 

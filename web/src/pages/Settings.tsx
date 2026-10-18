@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Group, Button, TextInput, NumberInput, PasswordInput, Stack as MStack, Text, Alert, SegmentedControl, Select, Autocomplete, Tabs, Badge, Loader, Switch, Code, CopyButton, ActionIcon, Anchor, Table, ScrollArea, Modal, Checkbox, Divider } from "@mantine/core";
-import { IconCheck, IconPlugConnected, IconAlertCircle, IconRobot, IconServer2, IconLayoutDashboard, IconTrash, IconPlus, IconCopy, IconBrandDocker, IconWorld, IconBell, IconDatabase, IconSparkles, IconAlertTriangle, IconFileImport, IconApps, IconRefresh, IconCloud, IconHistory, IconFileZip, IconUpload, IconDownload, IconKey } from "@tabler/icons-react";
+import { IconCheck, IconPlugConnected, IconAlertCircle, IconRobot, IconServer2, IconLayoutDashboard, IconTrash, IconPlus, IconCopy, IconBrandDocker, IconWorld, IconBell, IconDatabase, IconSparkles, IconAlertTriangle, IconFileImport, IconApps, IconRefresh, IconCloud, IconHistory, IconFileZip, IconUpload, IconDownload, IconKey, IconBrandGithub } from "@tabler/icons-react";
 import { PageShell } from "../components/PageShell";
 import { TargetsSection } from "../hosting/TargetsPanel";
 import { confirmDelete, toastOk, toastErr } from "../ui";
@@ -10,6 +10,7 @@ import type { AuditEntry } from "../model";
 import * as api from "../api";
 import { useTitle } from "../useTitle";
 import { useAuth } from "../auth/AuthContext";
+import { GitHubAppTab } from "./GitHubAppTab";
 
 function HostingTab() {
   const user = useAuth().status?.user;
@@ -1125,12 +1126,13 @@ export function Settings() {
 
   return (
     <PageShell title="Settings" container="md">
-          <Tabs defaultValue={mayHosting ? "hosting" : "ai"} orientation="vertical" variant="pills">
+          <Tabs defaultValue={maySettings && new URLSearchParams(window.location.search).has("github") ? "github" : mayHosting ? "hosting" : "ai"} orientation="vertical" variant="pills">
             <Tabs.List mr="lg">
               {mayHosting && <Tabs.Tab value="hosting" leftSection={<IconLayoutDashboard size={15} />}>Hosting</Tabs.Tab>}
               <Tabs.Tab value="ai" leftSection={<IconSparkles size={15} />}>AI &amp; Agents</Tabs.Tab>
               {can(user, PERM_DOCKER) && <Tabs.Tab value="docker" leftSection={<IconBrandDocker size={15} />}>Docker</Tabs.Tab>}
               {maySettings && <Tabs.Tab value="sso" leftSection={<IconKey size={15} />}>Sign-in</Tabs.Tab>}
+              {maySettings && <Tabs.Tab value="github" leftSection={<IconBrandGithub size={15} />}>GitHub</Tabs.Tab>}
               {can(user, PERM_AUDIT) && <Tabs.Tab value="activity" leftSection={<IconHistory size={15} />}>Activity</Tabs.Tab>}
               {maySettings && <Tabs.Tab value="import" leftSection={<IconFileImport size={15} />}>Import</Tabs.Tab>}
               <Tabs.Tab value="env" leftSection={<IconServer2 size={15} />}>Environment</Tabs.Tab>
@@ -1156,6 +1158,11 @@ export function Settings() {
             {maySettings && (
               <Tabs.Panel value="sso" style={{ flex: 1 }}>
                 <SsoTab />
+              </Tabs.Panel>
+            )}
+            {maySettings && (
+              <Tabs.Panel value="github" style={{ flex: 1 }}>
+                <GitHubAppTab />
               </Tabs.Panel>
             )}
             {maySettings && (

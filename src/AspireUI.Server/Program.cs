@@ -94,6 +94,7 @@ app.MapAuditEndpoints();
 app.MapInstanceEndpoints();
 app.MapPtyEndpoints();
 app.MapOidcEndpoints();
+app.MapGitHubEndpoints();
 app.MapChatEndpoints();
 app.MapStackEndpoints();
 app.MapMethods("/api/{**rest}", new[] { "GET", "HEAD", "POST", "PUT", "DELETE", "PATCH" }, () => Results.NotFound());

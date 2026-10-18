@@ -138,17 +138,25 @@ public static class GitService
     }
 
     // Inject a PAT into an https URL for private-repo access: https://<token>@host/… (left as-is if not https or already has creds).
+    // A GitHub App installation token comes as "x-access-token:<token>", the user and password GitHub expects for it.
     private static string AuthUrl(string url, string? token)
     {
         if (string.IsNullOrWhiteSpace(token)) return url;
-        const string https = "https://";
+        const string https = "https://", app = "x-access-token:";
+        var creds = token.StartsWith(app, StringComparison.Ordinal)
+            ? app + Uri.EscapeDataString(token[app.Length..])
+            : Uri.EscapeDataString(token);
         return url.StartsWith(https, StringComparison.OrdinalIgnoreCase) && !url.Contains('@')
-            ? https + Uri.EscapeDataString(token) + "@" + url[https.Length..]
+            ? https + creds + "@" + url[https.Length..]
             : url;
     }
 
-    private static string Scrub(string s, string? token) =>
-        string.IsNullOrEmpty(token) ? s : s.Replace(token, "***").Replace(Uri.EscapeDataString(token), "***");
+    private static string Scrub(string s, string? token)
+    {
+        if (string.IsNullOrEmpty(token)) return s;
+        var secret = token.StartsWith("x-access-token:", StringComparison.Ordinal) ? token["x-access-token:".Length..] : token;
+        return s.Replace(token, "***").Replace(secret, "***").Replace(Uri.EscapeDataString(secret), "***");
+    }
 
     public static (List<string>? branches, string? error) ListBranches(string url, string? token = null)
     {
@@ -170,6 +178,17 @@ public static class GitService
             return (branches, null);
         }
         return (null, "could not list branches (private repo or bad URL?)");
+    }
+
+    /// <summary>The commit a branch (or, with none, the default branch) points at — null when the remote can't be read.</summary>
+    public static string? HeadCommit(string url, string? branch, string? token = null)
+    {
+        if (string.IsNullOrWhiteSpace(url)) return null;
+        var gitRef = string.IsNullOrWhiteSpace(branch) ? "HEAD" : "refs/heads/" + branch!.Trim();
+        var (code, log) = Run("git", new List<string> { "ls-remote", AuthUrl(url, token), gitRef }, 30_000);
+        if (code != 0) return null;
+        var first = log.Split('\n').Select(l => l.Trim()).FirstOrDefault(l => l.EndsWith(gitRef, StringComparison.Ordinal));
+        return first?.Split('\t', ' ')[0] is { Length: 40 } sha ? sha : null;
     }
 
     // Extract repo name from URL (e.g., github.com/.../immich.git → immich).

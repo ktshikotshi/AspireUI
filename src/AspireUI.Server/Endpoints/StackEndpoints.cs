@@ -8,6 +8,8 @@ namespace AspireUI.Server.Endpoints;
 
 public static class StackEndpoints
 {
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, byte> GitPulling = new();
+
     public static void MapStackEndpoints(this WebApplication app)
     {
         var dataDir = Path.Combine(
@@ -46,6 +48,10 @@ public static class StackEndpoints
         var proxy = new ProxyService(deploy, Path.Combine(wsRoot, "_proxy"), Environment.GetEnvironmentVariable("HOSTING_BASE_DOMAIN") ?? "localhost");
         var dbFile = Environment.GetEnvironmentVariable("DB_PATH") ?? Path.Combine(dataDir, "aspireui.db");
         var secrets = new SecretStore(dbFile, dataDir);
+        var github = new GitHubAppService(settings, secrets);
+        // A token the import was given wins; without one, a repository the GitHub App is installed on
+        // is cloned with an installation token minted for the occasion.
+        string? GitToken(string url, string? given) => !string.IsNullOrWhiteSpace(given) ? given : github.CloneTokenFor(url);
         var targetStore = new TargetStore(dbFile);
         var targets = new TargetService(targetStore, secrets, wsRoot);
         var provision = new ProvisionService(targetStore, targets, secrets);
@@ -367,6 +373,7 @@ public static class StackEndpoints
                 settings.SetValue($"git:{id}", null);
             }
             settings.SetValue($"gitenv:{id}", null);
+            settings.SetValue($"gitsha:{id}", null);
         }
         app2.MapDelete("/stacks/{id}", (string id) =>
         {
@@ -504,7 +511,21 @@ public static class StackEndpoints
             return stack is null ? Results.UnprocessableEntity(error) : Persist(New(stack, ctx));
         }).RequirePerm(Perm.OpenEditor);
 
-        IResult GitPullRedeploy(string id, HttpContext ctx)
+        IResult GitPullRedeploy(string id, HttpContext ctx) => GitPullRedeployOn(id, PublicHost(ctx));
+        // Pushes and polls redeploy with no browser behind them, so the host links are built for is
+        // the configured one, or the one this app's links already use.
+        string HostFor(string id) =>
+            settings.GetValue("PublicHost") is { Length: > 0 } cfg ? cfg
+            : deployments.GetByStack(id)?.Urls.Select(u => Uri.TryCreate(u, UriKind.Absolute, out var x) ? x.Host : null)
+                .FirstOrDefault(h => !string.IsNullOrEmpty(h)) ?? "localhost";
+        IResult GitPullRedeployOn(string id, string host)
+        {
+            // A webhook, a poll and a click can arrive together; the second one would clone over the first.
+            if (!GitPulling.TryAdd(id, 0)) return Results.Conflict(new { message = "this app is already being updated from Git" });
+            try { return GitPullRedeployCore(id, host); }
+            finally { GitPulling.TryRemove(id, out _); }
+        }
+        IResult GitPullRedeployCore(string id, string host)
         {
             var cfgRaw = settings.GetValue($"git:{id}");
             if (cfgRaw is null) return Results.BadRequest(new { message = "this stack was not deployed from Git" });
@@ -512,8 +533,10 @@ public static class StackEndpoints
             if (store.Get(id) is not { } existing) return Results.NotFound();
             var dir = Dir(id);
             try { if (Directory.Exists(dir)) Directory.Delete(dir, true); } catch { }
-            var (_, cerr) = GitService.CloneInto(g.Url, g.Branch, g.Subdir, dir, g.AuthToken);
+            var gitToken = GitToken(g.Url, g.AuthToken);
+            var (_, cerr) = GitService.CloneInto(g.Url, g.Branch, g.Subdir, dir, gitToken);
             if (cerr is not null) return Results.UnprocessableEntity(new { message = cerr });
+            if (GitService.HeadCommit(g.Url, g.Branch, gitToken) is { } sha) settings.SetValue($"gitsha:{id}", sha);
 
             var (rebuilt, err) = dirs.Build(id, dir, existing.RunAsIs ? "runasis" : g.Mode ?? "compose", existing.Name, g.Files, g.Services, g.Env, g.ServicePorts, g.Image, g.Port);
             if (rebuilt is null) return Results.UnprocessableEntity(new { message = err });
@@ -528,7 +551,7 @@ public static class StackEndpoints
             if (deployments.GetByStack(id) is not null)
             {
                 var dc = DashCfg();
-                hosting.Deploy(updated, PublishRoot(id), PublicHost(ctx), dc.Host, dc.Token, Path.GetFullPath(Dir(id)));
+                hosting.Deploy(updated, PublishRoot(id), host, dc.Host, dc.Token, Path.GetFullPath(Dir(id)));
                 redeployed = true;
             }
             return Results.Ok(new { stackId = id, redeployed });
@@ -539,7 +562,7 @@ public static class StackEndpoints
             settings.SetValue($"gitenv:{id}", System.Text.Json.JsonSerializer.Serialize(GitRedeploy.EnvByResource(fromRepo), gitJson));
         app2.MapPost("/git/inspect", (GitImportRequest b) =>
         {
-            var r = GitService.Inspect(b.Url, b.Branch, b.Subdir, b.AuthToken);
+            var r = GitService.Inspect(b.Url, b.Branch, b.Subdir, GitToken(b.Url, b.AuthToken));
             if (r.Error is not null) return Results.UnprocessableEntity(new { message = r.Error });
             var apps = r.Manifest is null ? new List<ContainerPreset>() : ManifestImporter.Parse(r.Manifest).apps;
             // A GitHub repository with a Dockerfile usually publishes its image to ghcr.io under the same
@@ -559,7 +582,7 @@ public static class StackEndpoints
         });
         app2.MapPost("/git/branches", (GitImportRequest b) =>
         {
-            var (branches, error) = GitService.ListBranches(b.Url, b.AuthToken);
+            var (branches, error) = GitService.ListBranches(b.Url, GitToken(b.Url, b.AuthToken));
             return branches is null ? Results.UnprocessableEntity(new { message = error })
                 : Results.Ok(new { branches });
         });
@@ -568,7 +591,7 @@ public static class StackEndpoints
             var mode = string.IsNullOrWhiteSpace(b.Mode) ? "" : b.Mode!.ToLowerInvariant();
             var dir = Dir(sid);
             void RmDir() { try { if (Directory.Exists(dir)) Directory.Delete(dir, true); } catch { } }
-            var (name, cerr) = GitService.CloneInto(b.Url, b.Branch, b.Subdir, dir, b.AuthToken);
+            var (name, cerr) = GitService.CloneInto(b.Url, b.Branch, b.Subdir, dir, GitToken(b.Url, b.AuthToken));
             if (cerr is not null) { RmDir(); return (null, cerr); }
             var manifestMode = mode == "manifest" || (mode.Length == 0 && GitService.FindManifest(dir) is not null);
             var stackName = string.IsNullOrWhiteSpace(b.Name) ? (manifestMode ? "" : name ?? "git app") : b.Name!;
@@ -588,6 +611,7 @@ public static class StackEndpoints
             settings.SetValue($"git:{sid}", System.Text.Json.JsonSerializer.Serialize(new GitStackRef(b.Url, b.Branch, b.Subdir, token, b.AuthToken, b.Files, b.Env, b.Services, b.ServicePorts,
                 Mode: effectiveMode, Image: b.Image, Port: b.Port), gitJson));
             settings.SetValue($"githook:{token}", sid);
+            if (GitService.HeadCommit(b.Url, b.Branch, GitToken(b.Url, b.AuthToken)) is { } sha) settings.SetValue($"gitsha:{sid}", sha);
             SaveGitBaseline(sid, withMeta);
             store.Save(withMeta);
             gen.Materialize(withMeta, Dir(sid));
@@ -598,7 +622,73 @@ public static class StackEndpoints
             var cfgRaw = settings.GetValue($"git:{id}");
             if (cfgRaw is null) return Results.NotFound();
             var g = System.Text.Json.JsonSerializer.Deserialize<GitStackRef>(cfgRaw, gitJson)!;
-            return Results.Ok(new { url = g.Url, branch = g.Branch, subdir = g.Subdir, webhookPath = $"/api/git/hook/{g.Token}" });
+            return Results.Ok(new
+            {
+                url = g.Url, branch = g.Branch, subdir = g.Subdir, webhookPath = $"/api/git/hook/{g.Token}",
+                autoDeploy = g.AutoDeploy, githubApp = github.Configured && GitHubAppService.RepoOf(g.Url) is not null,
+                commit = settings.GetValue($"gitsha:{id}"),
+            });
+        });
+        app2.MapPut("/stacks/{id}/git/auto-deploy", (string id, AutoDeployRequest b) =>
+        {
+            if (settings.GetValue($"git:{id}") is not { } cfgRaw) return Results.NotFound();
+            var g = System.Text.Json.JsonSerializer.Deserialize<GitStackRef>(cfgRaw, gitJson)!;
+            settings.SetValue($"git:{id}", System.Text.Json.JsonSerializer.Serialize(g with { AutoDeploy = b.Enabled }, gitJson));
+            return Results.NoContent();
+        }).RequirePerm(Perm.Deploy);
+
+        // Git stacks that follow a GitHub repository, for pushes and polls.
+        IEnumerable<(string Id, GitStackRef Ref)> GitStacks() =>
+            settings.All().Where(kv => kv.Key.StartsWith("git:", StringComparison.Ordinal))
+                .Select(kv => { try { return (kv.Key[4..], System.Text.Json.JsonSerializer.Deserialize<GitStackRef>(kv.Value, gitJson)); } catch { return (kv.Key[4..], null); } })
+                .Where(x => x.Item2 is not null && store.Get(x.Item1) is not null)
+                .Select(x => (x.Item1, x.Item2!));
+
+        // GitHub's push event, signed with the app's webhook secret. The redeploy runs after the answer:
+        // GitHub gives up on a delivery after ten seconds and a build takes longer than that.
+        app2.MapPost("/github/webhook", async (HttpContext ctx) =>
+        {
+            using var ms = new MemoryStream();
+            await ctx.Request.Body.CopyToAsync(ms);
+            var body = ms.ToArray();
+            if (!GitHubAppService.VerifySignature(body, ctx.Request.Headers["X-Hub-Signature-256"].FirstOrDefault(), github.WebhookSecret()))
+                return Results.Unauthorized();
+            var kind = ctx.Request.Headers["X-GitHub-Event"].FirstOrDefault();
+            if (kind == "ping") return Results.Ok(new { pong = true });
+            if (kind != "push" || GitHubAppService.ParsePush(System.Text.Encoding.UTF8.GetString(body)) is not { } push)
+                return Results.Ok(new { ignored = kind });
+            var due = GitStacks()
+                .Where(x => x.Ref.AutoDeploy && GitHubAppService.Tracks(x.Ref.Url, x.Ref.Branch, push)
+                    && settings.GetValue($"gitsha:{x.Id}") != push.After)
+                .Select(x => x.Id).ToList();
+            foreach (var id in due) _ = Task.Run(() => { try { GitPullRedeployOn(id, HostFor(id)); } catch { } });
+            return Results.Accepted(value: new { redeploying = due });
+        }).AllowAnonymous();
+
+        // Without a reachable webhook nothing tells this instance about a push, so it asks: one
+        // ls-remote per app every few minutes, and a redeploy only when the commit moved.
+        _ = Task.Run(async () =>
+        {
+            var last = DateTime.MinValue;
+            while (true)
+            {
+                await Task.Delay(TimeSpan.FromMinutes(1));
+                try
+                {
+                    var every = github.PollMinutes;
+                    if (every <= 0 || !github.Configured || DateTime.UtcNow - last < TimeSpan.FromMinutes(every)) continue;
+                    last = DateTime.UtcNow;
+                    foreach (var (id, g) in GitStacks().ToList())
+                    {
+                        if (!g.AutoDeploy || GitHubAppService.RepoOf(g.Url) is null || deployments.GetByStack(id) is null) continue;
+                        if (GitService.HeadCommit(g.Url, g.Branch, GitToken(g.Url, g.AuthToken)) is not { } head) continue;
+                        var seen = settings.GetValue($"gitsha:{id}");
+                        if (seen is null) { settings.SetValue($"gitsha:{id}", head); continue; }
+                        if (seen != head) GitPullRedeployOn(id, HostFor(id));
+                    }
+                }
+                catch { }
+            }
         });
         app2.MapPost("/stacks/{id}/git/pull", (string id, HttpContext ctx) => GitPullRedeploy(id, ctx)).RequirePerm(Perm.Deploy);
         app2.MapPost("/git/hook/{token}", (string token, HttpContext ctx) =>
@@ -1903,7 +1993,8 @@ public static class StackEndpoints
     public record StorageCleanRequest(Dictionary<string, List<string>>? Selected);
     public record StorageAutoRequest(int IntervalHours, List<string>? Kinds, int MinAgeDays);
     public record GitImportRequest(string Url, string? Branch, string? Subdir, string? Name, string? Mode = null, string? AuthToken = null, string[]? Files = null, Dictionary<string, string>? Env = null, string[]? Services = null, Dictionary<string, int>? ServicePorts = null, string? Image = null, int? Port = null);
-    public record GitStackRef(string Url, string? Branch, string? Subdir, string Token, string? AuthToken = null, string[]? Files = null, Dictionary<string, string>? Env = null, string[]? Services = null, Dictionary<string, int>? ServicePorts = null, string? Mode = null, string? Image = null, int? Port = null);
+    public record GitStackRef(string Url, string? Branch, string? Subdir, string Token, string? AuthToken = null, string[]? Files = null, Dictionary<string, string>? Env = null, string[]? Services = null, Dictionary<string, int>? ServicePorts = null, string? Mode = null, string? Image = null, int? Port = null, bool AutoDeploy = true);
+    public record AutoDeployRequest(bool Enabled);
     public record HookEnabledRequest(bool Enabled);
     public record EnabledRequest(bool Enabled);
     public record HostingDeployRequest(string? TargetId = null);

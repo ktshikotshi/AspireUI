@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Alert, Button, Card, Center, Divider, PasswordInput, Stack as MStack, Text, TextInput, Title } from "@mantine/core";
-import { IconAlertCircle, IconKey } from "@tabler/icons-react";
+import { IconAlertCircle, IconKey, IconBrandGithub } from "@tabler/icons-react";
 import * as api from "../api";
 import { useAuth } from "./AuthContext";
 import logo from "../assets/logo.svg";
@@ -17,8 +17,10 @@ export function LoginPage() {
   const [ticket, setTicket] = useState<string | null>(null);
   const [code, setCode] = useState("");
   const [sso, setSso] = useState<{ enabled: boolean; label: string } | null>(null);
+  const [github, setGithub] = useState(false);
 
   useEffect(() => { api.ssoStatus().then(setSso).catch(() => setSso(null)); }, []);
+  useEffect(() => { api.githubLoginStatus().then(r => setGithub(r.enabled)).catch(() => setGithub(false)); }, []);
   // A failed sign-on comes back here with a reason in the url rather than a blank page.
   useEffect(() => {
     const reason = new URLSearchParams(location.search).get("ssoError");
@@ -100,14 +102,18 @@ export function LoginPage() {
                 onKeyDown={e => { if (e.key === "Enter") submit(); }}
               />
               <Button onClick={submit} loading={busy} fullWidth mt="xs">Sign in</Button>
+              {(sso?.enabled || github) && <Divider label="or" labelPosition="center" my="xs" />}
               {sso?.enabled && (
-                <>
-                  <Divider label="or" labelPosition="center" my="xs" />
-                  <Button variant="default" fullWidth leftSection={<IconKey size={16} />}
-                    component="a" href={api.ssoStartUrl("/")}>
-                    Sign in with {sso.label}
-                  </Button>
-                </>
+                <Button variant="default" fullWidth leftSection={<IconKey size={16} />}
+                  component="a" href={api.ssoStartUrl("/")}>
+                  Sign in with {sso.label}
+                </Button>
+              )}
+              {github && (
+                <Button variant="default" fullWidth leftSection={<IconBrandGithub size={16} />}
+                  component="a" href={api.githubStartUrl({ next: "/" })}>
+                  Sign in with GitHub
+                </Button>
               )}
             </>
           )}
