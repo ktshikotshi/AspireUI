@@ -1,9 +1,10 @@
 using AspireUI.Server.Models;
 using AspireUI.Server.Services;
 
-// A compose file that puts its app behind its own reverse proxy declares no ports on the app itself.
-// Imported as-is that yields a running but unreachable stack, so the importer falls back to the
-// Dockerfile's EXPOSE, or to a port the user typed in the wizard.
+// A compose file in which nothing declares a port imports as a running but unreachable stack, so the
+// importer falls back to the Dockerfile's EXPOSE, or to a port the user typed in the wizard. A file
+// that already reaches its app through something else (a reverse proxy) keeps its other services
+// internal.
 public class ComposePortFallbackTests
 {
     private const string BehindProxy = """
@@ -16,6 +17,14 @@ public class ComposePortFallbackTests
             image: caddy:2
             ports:
               - "80:80"
+        """;
+
+    private const string NothingPublished = """
+        services:
+          app:
+            build: .
+          worker:
+            image: acme/worker:1
         """;
 
     private static string TempDirWithDockerfile(string content)
@@ -39,15 +48,29 @@ public class ComposePortFallbackTests
     }
 
     [Fact]
-    public void The_dockerfiles_expose_becomes_the_endpoint()
+    public void The_dockerfiles_expose_becomes_the_endpoint_when_nothing_else_is_reachable()
     {
         var dir = TempDirWithDockerfile("FROM node:22\nEXPOSE 3000\nCMD [\"node\", \"server.js\"]\n");
         try
         {
-            var (stack, error) = new ComposeImporter().Import("s1", "demo", BehindProxy, srcDir: dir);
+            var (stack, error) = new ComposeImporter().Import("s1", "demo", NothingPublished, srcDir: dir);
             Assert.Null(error);
             Assert.Contains("targetPort: 3000", Endpoints(stack!, "app"));
-            Assert.Contains("targetPort: 80", Endpoints(stack!, "caddy"));   // declared ports still win
+            Assert.Empty(Endpoints(stack!, "worker"));                       // no Dockerfile to read
+        }
+        finally { Directory.Delete(dir, true); }
+    }
+
+    [Fact]
+    public void Behind_a_reverse_proxy_the_app_stays_internal()
+    {
+        var dir = TempDirWithDockerfile("FROM node:22\nEXPOSE 3000\n");
+        try
+        {
+            var (stack, error) = new ComposeImporter().Import("s1", "demo", BehindProxy, srcDir: dir);
+            Assert.Null(error);
+            Assert.Empty(Endpoints(stack!, "app"));
+            Assert.Contains("targetPort: 80", Endpoints(stack!, "caddy"));
         }
         finally { Directory.Delete(dir, true); }
     }
