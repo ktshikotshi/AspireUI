@@ -632,7 +632,10 @@ public class HostingService(DeploymentStore store, PublishService publish, Deplo
     {
         if (!stack.RunAsIs || stack.AppHostProject is not { Length: > 0 } ahp) return (yaml, false);
         var csproj = Path.Combine(srcDir, ahp.Replace('/', Path.DirectorySeparatorChar));
-        return File.Exists(csproj) ? AppHostPublish.InjectProjectBuilds(yaml, AppHostPublish.Projects(csproj), srcDir) : (yaml, false);
+        if (!File.Exists(csproj)) return (yaml, false);
+        var (withProjects, projects) = AppHostPublish.InjectProjectBuilds(yaml, AppHostPublish.Projects(csproj), srcDir);
+        var (withApps, apps) = AppHostPublish.InjectJavaScriptBuilds(withProjects, AppHostPublish.JavaScriptApps(csproj), srcDir);
+        return (withApps, projects || apps);
     }
 
     public Deployment Deploy(StackModel stack, string publishRoot, string host = "localhost",
