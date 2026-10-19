@@ -58,10 +58,20 @@ const violetGlow:  MantineColorsTuple = ["#ece9ff","#d3ccff","#b3a6ff","#937fff"
 const gold:        MantineColorsTuple = ["#fff2d6","#ffe0a8","#ffcc70","#ffb838","#ffb020","#e69412","#c4770d","#9e5c09","#7a4506","#563004"];
 const amber:       MantineColorsTuple = ["#fff0d6","#ffddaa","#fdc873","#f7ae3f","#f5a623","#d68814","#ac6c0f","#83510b","#5c3907","#382304"];
 const tealGlow:    MantineColorsTuple = ["#d3fff4","#a3ffe8","#6ff2d6","#38e0bf","#2bd4bd","#17b09b","#0f8a7a","#0a655a","#06453d","#032824"];
+// Railway: near-black violet ground, purple accent.
+const railDark:    MantineColorsTuple = ["#f2f1f6","#d6d4e0","#aeaabf","#7d7893","#2c2939","#24212f","#1b1924","#13111c","#0e0c15","#09080e"];
+const railPurple:  MantineColorsTuple = ["#f6edff","#e9d6ff","#d6b3ff","#c08cfd","#ac66f7","#9f4ff0","#8d3ddc","#7330b5","#5a268e","#421c69"];
 const synthPink:   MantineColorsTuple = ["#ffe6f4","#ffb8de","#ff8ac8","#ff5cb0","#ff3d9e","#e62a86","#c41f6d","#9e1655","#7a103f","#56092a"];
 
+const INTER = "Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif";
+
 export const THEMES: AppTheme[] = [
-  { id: "ocean", label: "Ocean (default)", scheme: "dark", swatch: "#4c6ef5", dockview: "dockview-theme-dark", monaco: "vs-dark",
+  { id: "railway", label: "Railway", scheme: "dark", swatch: "#ac66f7", dockview: "dockview-theme-abyss", monaco: "vs-dark",
+    preview: { bg: "#13111c", surface: "#1b1924", accent: "#ac66f7", text: "#f2f1f6" },
+    theme: createTheme({ colors: { dark: railDark, brand: railPurple }, primaryColor: "brand", primaryShade: 4, defaultRadius: "md",
+      fontFamily: INTER, headings: { fontFamily: INTER, fontWeight: "600" }, fontFamilyMonospace: MONO, autoContrast: true }) },
+
+  { id: "ocean", label: "Ocean", scheme: "dark", swatch: "#4c6ef5", dockview: "dockview-theme-dark", monaco: "vs-dark",
     theme: createTheme({ primaryColor: "indigo", defaultRadius: "md" }) },
 
   { id: "github-dark", label: "GitHub Dark", scheme: "dark", swatch: "#2f81f7", dockview: "dockview-theme-github", monaco: "vs-dark",
@@ -140,7 +150,7 @@ export const THEMES: AppTheme[] = [
     theme: createTheme({ colors: { gray: ghGrayL, brand: ghBlueL }, primaryColor: "brand", primaryShade: 6, defaultRadius: "xl" }) },
 ];
 
-export const DEFAULT_THEME = "ocean";
+export const DEFAULT_THEME = "railway";
 export const THEME_KEY = "aspireui.theme";
 
 export function getTheme(id: string | null): AppTheme {

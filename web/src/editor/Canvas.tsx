@@ -561,8 +561,9 @@ export function Canvas({ stack, setStack, onSelect, onSelectIds, onShowPropertie
       onNodeClick={(_, n) => { if (!n.id.startsWith("live:") && !n.id.startsWith("note:") && !n.id.startsWith("group:")) onSelect(n.id); }}
       onNodeContextMenu={(e, n) => { if (n.id.startsWith("live:") || n.id.startsWith("note:")) return; e.preventDefault(); setMenu({ x: e.clientX, y: e.clientY, nodeId: n.id }); }}
       onPaneClick={() => setMenu(null)} onMoveStart={() => setMenu(null)}
-      onNodeDragStart={() => setMenu(null)} fitView>
-      <Background /><Controls />
+      onNodeDragStart={() => setMenu(null)} fitView
+      style={{ background: "var(--mantine-color-body)" }}>
+      <Background gap={20} size={1.5} color="var(--mantine-color-default-border)" bgColor="var(--mantine-color-body)" /><Controls />
       {showMinimap && <MiniMap pannable zoomable nodeColor={n => (n.data as any).addMethod ? resourceVisual((n.data as any).addMethod).color : "#888"} />}
       <Panel position="top-left">
         <Group gap={6}>
