@@ -8,7 +8,7 @@ import {
   Modal, TextInput, Badge, Center, Loader, Stack as MStack, ThemeIcon, Menu, Tooltip, Select,
 } from "@mantine/core";
 import {
-  IconPlus, IconTrash, IconLayoutGrid, IconChevronDown, IconSparkles,
+  IconPlus, IconTrash, IconLayoutGrid, IconSparkles,
   IconUpload, IconFileZip, IconFolder, IconDots, IconCopy, IconPencil, IconSearch, IconServer,
   IconPlayerPlay, IconPlayerStop, IconExternalLink, IconBookmark, IconUser, IconDownload, IconLayoutDashboard, IconBrandGithub, IconWorld, IconCopyPlus, IconClockHour4,
 } from "@tabler/icons-react";
@@ -307,83 +307,47 @@ export function StacksOverview({ simple = false }: { simple?: boolean }) {
     }
   };
 
-  const headerActions = (
+  // One "New" button, like Railway's: every way to start a project in one menu.
+  const newMenu = (
     <>
-              {mayDeploy && <Button variant={simple ? "filled" : "default"} leftSection={<IconDownload size={16} />} onClick={() => setInstallOpen(true)}>Install from Store</Button>}
-              {!simple && canEdit && <>
-              <Button.Group>
-                <Tooltip label="Create a new empty stack" withArrow>
-                  <Button leftSection={<IconPlus size={16} />} onClick={() => setOpen(true)}>
-                    New Stack
-                  </Button>
-                </Tooltip>
-                <Menu position="bottom-end" withArrow>
-                  <Menu.Target>
-                    <Tooltip label="Create from a demo template" withArrow>
-                      <Button px="xs" aria-label="Create from demo">
-                        <IconChevronDown size={16} />
-                      </Button>
-                    </Tooltip>
-                  </Menu.Target>
-                  <Menu.Dropdown>
-                    {templates.length === 0 ? (
-                      <Menu.Item disabled>No demo templates</Menu.Item>
-                    ) : (
-                      <>
-                        <Menu.Label>From demo…</Menu.Label>
-                        {templates.filter(t => !t.id.startsWith("user:")).map(t => (
-                          <Menu.Item key={t.id} leftSection={<IconSparkles size={14} />}
-                            onClick={() => createDemo(t.id)}>
-                            {t.name}
-                          </Menu.Item>
-                        ))}
-                        {templates.some(t => t.id.startsWith("user:")) && <Menu.Label>Your templates</Menu.Label>}
-                        {templates.filter(t => t.id.startsWith("user:")).map(t => (
-                          <Menu.Item key={t.id} leftSection={<IconBookmark size={14} />}
-                            onClick={() => createDemo(t.id)}
-                            rightSection={
-                              <ActionIcon component="div" size="sm" variant="subtle" color="red"
-                                onClick={e => { e.stopPropagation();
-                                  api.deleteUserTemplate(t.id.slice("user:".length)).then(() => { api.getTemplates().then(setTemplates); toastOk("Template deleted"); }).catch(toastErr); }}>
-                                <IconTrash size={13} />
-                              </ActionIcon>
-                            }>
-                            {t.name}
-                          </Menu.Item>
-                        ))}
-                      </>
-                    )}
-                  </Menu.Dropdown>
-                </Menu>
-              </Button.Group>
-
-              <Menu position="bottom-end" withArrow>
-                <Menu.Target>
-                  <Tooltip label="Import an existing AppHost (.cs/.csproj or .zip)" withArrow>
-                    <Button variant="default" leftSection={<IconUpload size={16} />} rightSection={<IconChevronDown size={16} />}>
-                      Import
-                    </Button>
-                  </Tooltip>
-                </Menu.Target>
-                <Menu.Dropdown>
-                  <Menu.Item leftSection={<IconFileZip size={14} />} onClick={() => zipInputRef.current?.click()}>
-                    ZIP archive
-                  </Menu.Item>
-                  <Menu.Item leftSection={<IconFolder size={14} />} onClick={pickFolder}>
-                    Folder (.cs/.csproj)
-                  </Menu.Item>
-                  <Menu.Item leftSection={<IconFileZip size={14} />} onClick={() => composeInputRef.current?.click()}>
-                    docker-compose.yml
-                  </Menu.Item>
-                  <Menu.Item leftSection={<IconBrandGithub size={14} />} onClick={() => setGitOpen(true)}>
-                    Git repository…
-                  </Menu.Item>
-                </Menu.Dropdown>
-              </Menu>
-              <input ref={zipInputRef} type="file" accept=".zip" hidden onChange={onZipPicked} />
-              <input ref={folderInputRef} type="file" multiple hidden onChange={onFolderFallbackPicked} />
-              <input ref={composeInputRef} type="file" accept=".yml,.yaml" hidden onChange={onComposePicked} />
-              </>}
+      {simple ? (
+        mayDeploy && <Button leftSection={<IconDownload size={16} />} onClick={() => setInstallOpen(true)}>Install from Store</Button>
+      ) : canEdit && (
+        <Menu position="bottom-end" withArrow width={260}>
+          <Menu.Target>
+            <Button leftSection={<IconPlus size={16} />}>New</Button>
+          </Menu.Target>
+          <Menu.Dropdown>
+            <Menu.Item leftSection={<IconPlus size={14} />} onClick={() => setOpen(true)}>Empty project</Menu.Item>
+            <Menu.Item leftSection={<IconBrandGithub size={14} />} onClick={() => setGitOpen(true)}>GitHub repository</Menu.Item>
+            {mayDeploy && <Menu.Item leftSection={<IconDownload size={14} />} onClick={() => setInstallOpen(true)}>App from the store</Menu.Item>}
+            <Menu.Label>Import</Menu.Label>
+            <Menu.Item leftSection={<IconFileZip size={14} />} onClick={() => zipInputRef.current?.click()}>ZIP archive</Menu.Item>
+            <Menu.Item leftSection={<IconFolder size={14} />} onClick={pickFolder}>Folder (.cs/.csproj)</Menu.Item>
+            <Menu.Item leftSection={<IconUpload size={14} />} onClick={() => composeInputRef.current?.click()}>docker-compose.yml</Menu.Item>
+            {templates.length > 0 && <Menu.Label>Templates</Menu.Label>}
+            {templates.filter(t => !t.id.startsWith("user:")).map(t => (
+              <Menu.Item key={t.id} leftSection={<IconSparkles size={14} />} onClick={() => createDemo(t.id)}>{t.name}</Menu.Item>
+            ))}
+            {templates.filter(t => t.id.startsWith("user:")).map(t => (
+              <Menu.Item key={t.id} leftSection={<IconBookmark size={14} />}
+                onClick={() => createDemo(t.id)}
+                rightSection={
+                  <ActionIcon component="div" size="sm" variant="subtle" color="red"
+                    onClick={e => { e.stopPropagation();
+                      api.deleteUserTemplate(t.id.slice("user:".length)).then(() => { api.getTemplates().then(setTemplates); toastOk("Template deleted"); }).catch(toastErr); }}>
+                    <IconTrash size={13} />
+                  </ActionIcon>
+                }>
+                {t.name}
+              </Menu.Item>
+            ))}
+          </Menu.Dropdown>
+        </Menu>
+      )}
+      <input ref={zipInputRef} type="file" accept=".zip" hidden onChange={onZipPicked} />
+      <input ref={folderInputRef} type="file" multiple hidden onChange={onFolderFallbackPicked} />
+      <input ref={composeInputRef} type="file" accept=".yml,.yaml" hidden onChange={onComposePicked} />
     </>
   );
 
@@ -405,6 +369,20 @@ export function StacksOverview({ simple = false }: { simple?: boolean }) {
   const runningHosted = hostingStacks.filter(s => deps[s.id]?.state === "running" && !hostingBroken(deps[s.id])).length;
   const brokenHosted = hostingStacks.filter(s => hostingBroken(deps[s.id])).length;
 
+  // Railway-style one-line status: how many services are up, or why not.
+  const statusLine = (s: Stack, dep: Deployment | undefined, state: string) => {
+    const n = s.nodes.length;
+    const services = `${n} service${n === 1 ? "" : "s"}`;
+    if (dep) {
+      if (dep.state === "running") return `${services} ${hostingHealthLabel(dep)?.toLowerCase() ?? "online"}`;
+      return dep.state === "failed" ? "Deploy failed" : dep.state.charAt(0).toUpperCase() + dep.state.slice(1);
+    }
+    if (state === "Running") return `${services} running`;
+    if (state === "Starting") return "Starting…";
+    if (state === "Failed") return "Run failed";
+    return services;
+  };
+
   const renderCard = (s: typeof stacks[number]) => {
                 const st = statuses[s.id];
                 const state = st?.state ?? "NotRunning";
@@ -425,20 +403,13 @@ export function StacksOverview({ simple = false }: { simple?: boolean }) {
                 <Card
                   key={s.id}
                   withBorder
-                  shadow="sm"
                   padding="lg"
                   className="stack-card"
-                  style={{ cursor: "pointer", borderColor: dep ? dot : undefined, borderWidth: dep ? 2 : undefined }}
                   onClick={() => openStack(s)}
                 >
                   <Group justify="space-between" wrap="nowrap" align="flex-start">
                     <Group gap={8} wrap="nowrap" style={{ minWidth: 0 }}>
-                      <Tooltip label={failDetail ?? (dep?.state ?? state)} withArrow multiline maw={360}
-                        styles={failDetail ? { tooltip: { whiteSpace: "pre-wrap", fontFamily: "monospace", fontSize: 11, textAlign: "left" } } : undefined}>
-                        <span style={{ width: 10, height: 10, borderRadius: "50%", background: dot, flexShrink: 0,
-                          boxShadow: active ? `0 0 6px ${dot}` : undefined }} />
-                      </Tooltip>
-                      <Text fw={600} lineClamp={1}>{s.name}</Text>
+                      <Text fw={600} size="lg" lineClamp={1}>{s.name}</Text>
                       {s.fromGit && <Tooltip label="Imported from Git" withArrow><IconBrandGithub size={14} style={{ flexShrink: 0, opacity: 0.55 }} /></Tooltip>}
                     </Group>
                     <Group gap={6} wrap="nowrap">
@@ -507,7 +478,7 @@ export function StacksOverview({ simple = false }: { simple?: boolean }) {
                     </Group>
                   </Group>
                   {s.nodes.length > 0 && (
-                    <Group gap={5} mt="sm" wrap="nowrap">
+                    <Group gap={6} mt="md" wrap="nowrap" className="stack-card-services">
                       {[...new Map(s.nodes.map(n => [n.icon || n.addMethod, n])).values()].slice(0, 8).map(n => {
                         const key = n.icon || n.addMethod;
                         const names = s.nodes.filter(m => (m.icon || m.addMethod) === key).map(m => m.resourceName);
@@ -521,7 +492,7 @@ export function StacksOverview({ simple = false }: { simple?: boolean }) {
                               boxShadow: lit ? `0 0 7px 1px var(--mantine-color-${dep ? hostingColor(dep.state) : "green"}-5)` : undefined,
                               transition: "filter .3s, box-shadow .3s" }}
                               onClick={openUrl ? e => { e.stopPropagation(); window.open(openUrl, "_blank"); } : undefined}>
-                              <ResourceGlyph addMethod={n.addMethod} iconKey={n.icon} size={17} />
+                              <span className="stack-card-service"><ResourceGlyph addMethod={n.addMethod} iconKey={n.icon} size={18} /></span>
                             </span>
                           </Tooltip>
                         );
@@ -530,15 +501,18 @@ export function StacksOverview({ simple = false }: { simple?: boolean }) {
                         <Text size="xs" c="dimmed">+{new Map(s.nodes.map(n => [n.icon || n.addMethod, n])).size - 8}</Text>}
                     </Group>
                   )}
-                  <Group mt="sm" gap="xs" justify="space-between">
-                    <Group gap="xs">
-                      <Badge variant="light" color="indigo">{s.nodes.length} resource{s.nodes.length === 1 ? "" : "s"}</Badge>
-                      {dep?.state === "running" && hostStat[s.id]
-                        ? <Tooltip label={`CPU ${hostStat[s.id].cpu}% · ${hostStat[s.id].memMb} MB`} withArrow>
-                            <Badge variant="light" color="blue" ff="monospace">{hostStat[s.id].cpu}% · {hostStat[s.id].memMb}MB</Badge>
-                          </Tooltip>
-                        : <Badge variant="outline" color="gray">{s.targetFramework}</Badge>}
-                    </Group>
+                  <Group mt="auto" pt="md" gap="xs" justify="space-between" wrap="nowrap">
+                    <Tooltip label={failDetail ?? (dep?.state ?? state)} withArrow multiline maw={360}
+                      styles={failDetail ? { tooltip: { whiteSpace: "pre-wrap", fontFamily: "monospace", fontSize: 11, textAlign: "left" } } : undefined}>
+                      <Group gap={8} wrap="nowrap" style={{ minWidth: 0 }}>
+                        <span style={{ width: 8, height: 8, borderRadius: "50%", background: dot, flexShrink: 0,
+                          boxShadow: active ? `0 0 6px ${dot}` : undefined }} />
+                        <Text size="sm" c="dimmed" lineClamp={1}>{statusLine(s, dep, state)}</Text>
+                        {dep?.state === "running" && hostStat[s.id] && (
+                          <Text size="xs" c="dimmed" ff="monospace">· {hostStat[s.id].cpu}% · {hostStat[s.id].memMb}MB</Text>
+                        )}
+                      </Group>
+                    </Tooltip>
                     <Group gap={4} onClick={e => e.stopPropagation()}>
                       {dep ? (
                         <>
@@ -589,27 +563,21 @@ export function StacksOverview({ simple = false }: { simple?: boolean }) {
                       )}
                     </Group>
                   </Group>
-                  {(s.createdBy || s.createdAt) && (
-                    <Text size="xs" c="dimmed" mt={8}>
-                      {s.createdBy && <>by <b>{s.createdBy}</b></>}
-                      {s.createdBy && s.createdAt && " · "}
-                      {s.createdAt && new Date(s.createdAt).toLocaleDateString()}
-                    </Text>
+                  {creators.length > 1 && s.createdBy && (
+                    <Text size="xs" c="dimmed" mt={6}>by <b>{s.createdBy}</b></Text>
                   )}
                 </Card>
                 );
   };
 
   return (
-    <PageShell back={false} actions={headerActions}>
-          <Group justify="space-between" mb="lg">
-            <div>
-              <Title order={2} fw={600}>{simple ? "My apps" : "Stacks"}</Title>
-              <Text c="dimmed" size="sm">{simple ? "Your installed apps — click to manage." : "Your Aspire hosting projects, ready to open or run."}</Text>
-            </div>
+    <PageShell back={false}>
+          <Group justify="space-between" mb="lg" mt="md">
+            <Title order={2} fw={600}>{simple ? "My apps" : "Projects"}</Title>
+            <Group gap="xs">
             {stacks.length > 0 && (
-              <Group gap="xs">
-                <TextInput w={220} placeholder="Search stacks…" value={query}
+              <>
+                <TextInput w={220} placeholder="Search projects…" value={query}
                   onChange={e => setQuery(e.currentTarget.value)} leftSection={<IconSearch size={14} />} />
                 {creators.length > 1 && (
                   <Select w={150} placeholder="Any creator" clearable value={creatorFilter} onChange={setCreatorFilter}
@@ -617,8 +585,10 @@ export function StacksOverview({ simple = false }: { simple?: boolean }) {
                 )}
                 <Select w={140} placeholder="Any status" clearable value={statusFilter} onChange={setStatusFilter}
                   data={[{ value: "running", label: "Running" }, { value: "stopped", label: "Not running" }]} />
-              </Group>
+              </>
             )}
+            {newMenu}
+            </Group>
           </Group>
 
           {loading ? (
@@ -668,10 +638,10 @@ export function StacksOverview({ simple = false }: { simple?: boolean }) {
             <>
               {buildStacks.length > 0 && (
                 <MStack gap="sm" mb={hostingStacks.length + cloneStacks.length > 0 ? "xl" : 0}>
-                  {!simple && (
+                  {!simple && hostingStacks.length + cloneStacks.length > 0 && (
                     <Group gap="xs">
                       <IconLayoutGrid size={16} />
-                      <Title order={5} fw={600}>Stacks</Title>
+                      <Title order={5} fw={600}>In development</Title>
                       <Badge variant="light" color="gray" size="sm">{buildStacks.length}</Badge>
                     </Group>
                   )}
@@ -686,7 +656,7 @@ export function StacksOverview({ simple = false }: { simple?: boolean }) {
                   <Group justify="space-between" wrap="nowrap">
                     <Group gap="xs">
                       <IconServer size={16} />
-                      <Title order={5} fw={600}>{simple ? "My apps" : "Hosting"}</Title>
+                      <Title order={5} fw={600}>{simple ? "My apps" : "Deployed"}</Title>
                       <Badge variant="light" color="teal" size="sm">{runningHosted}/{hostingStacks.length} running</Badge>
                       {brokenHosted > 0 && (
                         <Tooltip label="Containers are crash-looping or unhealthy — open the app to see why" withArrow>

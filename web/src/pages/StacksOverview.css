@@ -1,7 +1,20 @@
 .stack-card {
-  transition: transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease;
+  display: flex;
+  flex-direction: column;
+  min-height: 168px;
+  cursor: pointer;
+  transition: border-color 120ms ease, background-color 120ms ease;
 }
 .stack-card:hover {
-  transform: translateY(-2px);
-  border-color: var(--mantine-color-indigo-6);
+  border-color: var(--mantine-primary-color-filled);
+}
+.stack-card-service {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid var(--mantine-color-default-border);
+  background: var(--mantine-color-body);
 }
